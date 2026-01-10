@@ -1,4 +1,4 @@
-﻿
+
 @using scfs_erp.Models;
 @model scfs_erp.Models.GateInDetail
 
@@ -120,25 +120,25 @@
                                             <div class="col-md-2">
                                                 <div class="form-group">
                                                     <label>Port In Date<span class="required-field"></span> </label>
-                                                    <input type="text" class="form-control datepicker NEWDATE1" id="NEWDATE1" name="NEWDATE1" data-val="false" tabindex="8" placeholder="Please Select Date" />
+                                                    @Html.TextBoxFor(model => Model.PORTINDATE, "{0:dd/MM/yyyy}", new { @class = "form-control datepicker NEWDATE1", @id = "NEWDATE1", @data_val = false, @tabindex = "8", @placeholder = "Please Select Date" })
                                                 </div>
                                             </div>
                                             <div class="col-md-2">
                                                 <div class="form-group">
                                                     <label>Port In Time<span class="required-field"></span> </label>
-                                                    <input type="text" class="form-control timepicker NEWTIME1" id="NEWTIME1" name="NEWTIME1" data-val="false" tabindex="9" />
+                                                    @Html.TextBoxFor(model => Model.PORTINTIME, "{0:HH:mm:ss}", new { @class = "form-control timepicker NEWTIME1", @id = "NEWTIME1", @data_val = false, @tabindex = "9" })
                                                 </div>
                                             </div>
                                             <div class="col-md-2">
                                                 <div class="form-group">
                                                     <label>Vessel Arrival Date<span class="required-field"></span> </label>
-                                                    <input type="text" class="form-control datepicker NEWDATE2" id="NEWDATE2" name="NEWDATE2" data-val="false" tabindex="10" placeholder="Please Select Date" />
+                                                    @Html.TextBoxFor(model => Model.VESSELARRIVALDATE, "{0:dd/MM/yyyy}", new { @class = "form-control datepicker NEWDATE2", @id = "NEWDATE2", @data_val = false, @tabindex = "10", @placeholder = "Please Select Date" })
                                                 </div>
                                             </div>
                                             <div class="col-md-2">
                                                 <div class="form-group">
                                                     <label>Vessel Arrival Time<span class="required-field"></span> </label>
-                                                    <input type="text" class="form-control timepicker NEWTIME2" id="NEWTIME2" name="NEWTIME2" data-val="false" tabindex="11" />
+                                                    @Html.TextBoxFor(model => Model.VESSELARRIVALTIME, "{0:HH:mm:ss}", new { @class = "form-control timepicker NEWTIME2", @id = "NEWTIME2", @data_val = false, @tabindex = "11" })
                                                 </div>
                                             </div>
                                         </div>

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -228,5 +228,17 @@ namespace scfs_erp.Models
 		public int GPSCNMTYPE { get; set; }
 
 		//columns added by Yamuna on 27-07-2021 for CR <S>
+
+		//Port In Date and Time - added for Port In tracking
+		[Column("PORT_INDATE")]
+		public Nullable<DateTime> PORTINDATE { get; set; }
+		[Column("PORT_INTIME")]
+		public Nullable<DateTime> PORTINTIME { get; set; }
+
+		//Vessel Arrival Date and Time - added for Vessel Arrival tracking
+		[Column("VESSEL_ARRIVAL_DATE")]
+		public Nullable<DateTime> VESSELARRIVALDATE { get; set; }
+		[Column("VESSEL_ARRIVAL_TIME")]
+		public Nullable<DateTime> VESSELARRIVALTIME { get; set; }
 	}
 }

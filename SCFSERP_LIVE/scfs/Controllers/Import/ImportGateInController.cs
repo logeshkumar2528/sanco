@@ -646,6 +646,124 @@ namespace scfs_erp.Controllers.Import
                 tab.GICCTLTIME = Convert.ToDateTime(todaydt);
             }
 
+            // PORT IN DATE AND TIME
+            string portindate = Request.Form.Get("PORTINDATE");
+            if (!string.IsNullOrEmpty(portindate))
+            {
+                try
+                {
+                    if (portindate.Contains('/'))
+                    {
+                        var portin_date = portindate.Split('/');
+                        if (portin_date.Length == 3)
+                        {
+                            string portin_datetime = portin_date[2] + "-" + portin_date[1] + "-" + portin_date[0];
+                            tab.PORTINDATE = Convert.ToDateTime(portin_datetime).Date;
+                        }
+                    }
+                    else
+                    {
+                        tab.PORTINDATE = Convert.ToDateTime(portindate).Date;
+                    }
+                }
+                catch { tab.PORTINDATE = null; }
+            }
+            else { tab.PORTINDATE = null; }
+
+            if (tab.PORTINDATE.HasValue && tab.PORTINDATE > Convert.ToDateTime(todayd))
+            {
+                tab.PORTINDATE = Convert.ToDateTime(todayd);
+            }
+
+            string portintime = Request.Form.Get("PORTINTIME");
+            if (!string.IsNullOrEmpty(portintime) && tab.PORTINDATE.HasValue)
+            {
+                try
+                {
+                    if (portintime.Contains(':'))
+                    {
+                        var portin_time = portintime.Split(':');
+                        if (portin_time.Length >= 2)
+                        {
+                            int hour = Convert.ToInt32(portin_time[0]);
+                            int minute = Convert.ToInt32(portin_time[1]);
+                            int second = portin_time.Length > 2 ? Convert.ToInt32(portin_time[2]) : 0;
+                            tab.PORTINTIME = new DateTime(tab.PORTINDATE.Value.Year, tab.PORTINDATE.Value.Month, tab.PORTINDATE.Value.Day, hour, minute, second);
+                        }
+                    }
+                    else
+                    {
+                        tab.PORTINTIME = Convert.ToDateTime(portintime);
+                    }
+                }
+                catch { tab.PORTINTIME = null; }
+            }
+            else { tab.PORTINTIME = null; }
+
+            if (tab.PORTINTIME.HasValue && tab.PORTINTIME > Convert.ToDateTime(todaydt))
+            {
+                tab.PORTINTIME = Convert.ToDateTime(todaydt);
+            }
+
+            // VESSEL ARRIVAL DATE AND TIME
+            string vesselarrivaldate = Request.Form.Get("VESSELARRIVALDATE");
+            if (!string.IsNullOrEmpty(vesselarrivaldate))
+            {
+                try
+                {
+                    if (vesselarrivaldate.Contains('/'))
+                    {
+                        var vessel_date = vesselarrivaldate.Split('/');
+                        if (vessel_date.Length == 3)
+                        {
+                            string vessel_datetime = vessel_date[2] + "-" + vessel_date[1] + "-" + vessel_date[0];
+                            tab.VESSELARRIVALDATE = Convert.ToDateTime(vessel_datetime).Date;
+                        }
+                    }
+                    else
+                    {
+                        tab.VESSELARRIVALDATE = Convert.ToDateTime(vesselarrivaldate).Date;
+                    }
+                }
+                catch { tab.VESSELARRIVALDATE = null; }
+            }
+            else { tab.VESSELARRIVALDATE = null; }
+
+            if (tab.VESSELARRIVALDATE.HasValue && tab.VESSELARRIVALDATE > Convert.ToDateTime(todayd))
+            {
+                tab.VESSELARRIVALDATE = Convert.ToDateTime(todayd);
+            }
+
+            string vesselarrivaltime = Request.Form.Get("VESSELARRIVALTIME");
+            if (!string.IsNullOrEmpty(vesselarrivaltime) && tab.VESSELARRIVALDATE.HasValue)
+            {
+                try
+                {
+                    if (vesselarrivaltime.Contains(':'))
+                    {
+                        var vessel_time = vesselarrivaltime.Split(':');
+                        if (vessel_time.Length >= 2)
+                        {
+                            int hour = Convert.ToInt32(vessel_time[0]);
+                            int minute = Convert.ToInt32(vessel_time[1]);
+                            int second = vessel_time.Length > 2 ? Convert.ToInt32(vessel_time[2]) : 0;
+                            tab.VESSELARRIVALTIME = new DateTime(tab.VESSELARRIVALDATE.Value.Year, tab.VESSELARRIVALDATE.Value.Month, tab.VESSELARRIVALDATE.Value.Day, hour, minute, second);
+                        }
+                    }
+                    else
+                    {
+                        tab.VESSELARRIVALTIME = Convert.ToDateTime(vesselarrivaltime);
+                    }
+                }
+                catch { tab.VESSELARRIVALTIME = null; }
+            }
+            else { tab.VESSELARRIVALTIME = null; }
+
+            if (tab.VESSELARRIVALTIME.HasValue && tab.VESSELARRIVALTIME > Convert.ToDateTime(todaydt))
+            {
+                tab.VESSELARRIVALTIME = Convert.ToDateTime(todaydt);
+            }
+
             if (tab.CUSRID == "" || tab.CUSRID == null)
             {
                 if (Session["CUSRID"] != null)
