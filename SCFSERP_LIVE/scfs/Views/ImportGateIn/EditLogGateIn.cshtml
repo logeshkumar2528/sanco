@@ -91,17 +91,17 @@
         {"GPWGHT", "weighment"}, {"GPNOP", "NOP"},
         {"ROWID", "Row"}, {"SLOTID", "Slot"}, {"STAGID", "Stage"}, {"GDWNID", "Godown"},
         {"CFSNAME", "CFS Name"},
-        {"GIREMKRS", "Remarks"}, {"GPETYPE", "SSR/Escort"}, {"GPEAMT", "SSR/Escort"},
+        {"GIREMKRS", "Remarks"}, {"GPETYPE", "SSR/Escort"}, {"GPEAMT", "SSR/Escort Amount"},
         // Ensure GPETYPE is explicitly mapped - this is critical for SSR/Escort display
-        {"DISPSTATUS", "Status"}, {"GPSCNTYPE", "Scan Type"}, {"GPSCNMTYPE", "SAmend/Mismatch"},
+        {"DISPSTATUS", "Status"}, {"GPSCNTYPE", "Scan Type"}, {"GPSCNMTYPE", "Scan Type"},
         {"GSEALTYPE", "Seal Type"},
         // Additional mappings for controller-transformed field names and missing fields
         {"In Date", "Gate In Date"}, {"In Time", "Gate In Time"}, // Controller transforms GIDATE/GITIME to "In Date"/"In Time"
         {"Port Out Date", "Port Out Date"}, {"Port Out Time", "Port Out Time"}, // Controller transforms GICCTLDATE/GICCTLTIME
         {"Weight", "weighment"}, // Controller transforms GPWGHT to "Weight"
         {"Weightment", "Weightment"}, // Controller transforms GPWTYPE to "Weightment" (matches form label)
-        {"Scan Type", "SAmend/Mismatch"}, // Controller transforms GPSCNMTYPE to "Scan Type"
-        {"SSR/Escort", "SSR/Escort"}, // Controller transforms GPEAMT to "SSR/Escort"
+        {"Scan Type", "Scan Type"}, // Controller transforms GPSCNMTYPE to "Scan Type"
+        {"SSR/Escort", "SSR/Escort"}, {"SSR/Escort Amount", "SSR/Escort Amount"}, // Controller transforms GPEAMT to "SSR/Escort Amount"
         {"S.Amend / Mismatch", "S.Amend / Mismatch"}, // Controller transforms GPSTYPE to "S.Amend / Mismatch" (matches form label)
         {"GRADEID", "Refer(Plug)"}, {"GFCLTYPE", "FCL"},
         // ExBond GateIn specific mappings (controller transforms these field names)
@@ -184,7 +184,8 @@
         "Handling SGST Amount", "Handling CGST Amount", "Handling SGST %", "Handling CGST %", "Handling IGST %", "Handling IGST Amount", // ExportManualBill - exclude friendly names
         "Storage IGST Amount", "Storage IGST %", "Handling Taxable Amount", "Storage Taxable Amount", "Handling HSN Code", "Storage HSN Code", // ExportManualBill - exclude friendly names
         // StuffingBill - exclude removed fields
-        "TRANHAMT", "Handling Amount", "TRANLMDATE", "TRANLSDATE", "TRANNARTN", "Narration", "TRANREFBNAME", "Bank" // StuffingBill - exclude Handling Amount, Lorry dates, Narration, and duplicate Bank
+        "TRANHAMT", "Handling Amount", "TRANLMDATE", "TRANLSDATE", "TRANNARTN", "Narration", "TRANREFBNAME", "Bank", // StuffingBill - exclude Handling Amount, Lorry dates, Narration, and duplicate Bank
+        "GTRNSPRTNAME", "Other Transporter Name", "Other Transpoter Name" // Exclude Other Transporter Name field (including typo variant)
     };
     
     // For ExBondGateIn, ImportLoadSlip, and OpenSheet, don't exclude Status - user wants to see it
@@ -357,8 +358,8 @@
                                             
                                             // CRITICAL: Check if this is one of our target fields that must ALWAYS be shown
                                             // These fields are stored in DB as: GPWGHT, GPEAMT, GPSCNMTYPE, GPSTYPE, GPETYPE, GRADEID, GFCLTYPE, GPWTYPE
-                                            // Controller transforms some of them to: Weight, SSR/Escort, Scan Type, etc.
-                                            // View maps them to: weighment, SSR/Escort, SAmend/Mismatch, etc.
+                                            // Controller transforms some of them to: Weight, SSR/Escort Amount, Scan Type, etc.
+                                            // View maps them to: weighment, SSR/Escort Amount, Scan Type, etc.
                                             // Also include ImportInvoice important fields: TARIFFGID, TARIFFMID
                                             var isTargetField = fieldName.Equals("GPWGHT", StringComparison.OrdinalIgnoreCase) || 
                                                                  fieldName.Equals("GPEAMT", StringComparison.OrdinalIgnoreCase) || 
@@ -372,9 +373,12 @@
                                                                  fieldName.Equals("TARIFFMID", StringComparison.OrdinalIgnoreCase) ||
                                                                  fieldName.Equals("Weight", StringComparison.OrdinalIgnoreCase) || 
                                                                  fieldName.Equals("SSR/Escort", StringComparison.OrdinalIgnoreCase) || 
+                                                                 fieldName.Equals("SSR/Escort Amount", StringComparison.OrdinalIgnoreCase) ||
                                                                  fieldName.Equals("Scan Type", StringComparison.OrdinalIgnoreCase) ||
                                                                  friendlyFieldName.Equals("weighment", StringComparison.OrdinalIgnoreCase) ||
                                                                  friendlyFieldName.Equals("SSR/Escort", StringComparison.OrdinalIgnoreCase) ||
+                                                                 friendlyFieldName.Equals("SSR/Escort Amount", StringComparison.OrdinalIgnoreCase) ||
+                                                                 friendlyFieldName.Equals("Scan Type", StringComparison.OrdinalIgnoreCase) ||
                                                                  friendlyFieldName.Equals("SAmend/Mismatch", StringComparison.OrdinalIgnoreCase) ||
                                                                  friendlyFieldName.Equals("S.Amend / Mismatch", StringComparison.OrdinalIgnoreCase) ||
                                                                  friendlyFieldName.Equals("Refer(Plug)", StringComparison.OrdinalIgnoreCase) ||

@@ -1,4 +1,4 @@
-﻿
+
 using scfs.Data;
 using scfs_erp.Context;
 using scfs_erp.Helper;
@@ -1500,7 +1500,7 @@ namespace scfs_erp.Controllers.Import
                         case "GPMODEID": return "GP Mode";
                         case "GPETYPE": return "Seal Type";
                         case "GPSTYPE": return "S.Amend / Mismatch";
-                        case "GPEAMT": return "SSR/Escort";
+                        case "GPEAMT": return "SSR/Escort Amount";
                         case "GPAAMT": return "Addtnl. Amount";
                         case "GPSCNTYPE": return "Scanned";
                         case "GPSCNMTYPE": return "Scan Type";
