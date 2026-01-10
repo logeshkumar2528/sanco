@@ -1,0 +1,503 @@
+
+@model IEnumerable<scfs_erp.Models.RemoteGateIn>
+
+
+@{
+    ViewBag.Title = "Gate In Transfer";
+}
+<style>
+    .frm_hide {
+        display: none;
+    }
+
+    #sidebar {
+        display: none;
+    }
+
+    #main-content {
+        margin-left: auto;
+    }
+</style>
+<div id="main-content">
+    <div class="col-md-12">
+        <div class="row">
+            <div class="col-lg-12">
+                <div class="box">
+                    <div class="panel panel-primary" style="background: #323C55;">
+                        <div class="panel-heading">
+                            <div class="panel-title">
+                                <i class="glyphicon glyphicon-import"></i>Gate In Transfer
+                                <button type="button" id="btnCallAPI" class="btn btn-info btn-sm pull-right" style="padding:3px;margin:0 5px 10px"><i class="fa fa-cloud"></i> Call API</button>
+                                <a class="btn btn-success btn-sm pull-right hide" style="padding:3px;margin:0 0 10px" href="@Url.Action("Form", "ImportRemoteGateIn")"><i class="fa fa-plus-square "></i> Add New </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="box-content no-padding">
+                        <div class="row">
+                            <div class="col-xs-3"> </div>
+                            <div class="col-xs-6 hide">
+                                <form action="#" method="post" accept-charset="utf-8" id="importremotegateinform" data-ng-controller="myController" name="importremotegateinform">
+
+                                    <label for="from">From</label>
+                                    <input type="text" id="from" name="from" value="@System.Web.HttpContext.Current.Session["SDATE"]">
+                                    <label for="to">to</label>
+                                    <input type="text" id="to" name="to" value="@System.Web.HttpContext.Current.Session["EDATE"]">
+                                    <input type="submit" name="submit" value="Search" class="btn btn-primary btn-xs" />
+                                </form>
+                            </div>
+                        </div>
+                        <br />
+                        <table class="table table-bordered table-striped table-hover table-heading table-datatable" id="dataTables-example">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        Date
+                                    </th>
+                                    <th>
+                                        No
+                                    </th>
+
+
+                                    <th>
+                                        Container&nbsp;No
+                                    </th>
+                                    <th>Size</th>
+                                    <th>
+                                        IGM&nbsp;No
+                                    </th>
+                                    <th>
+                                        Line&nbsp;No
+                                    </th>
+                                    <th>
+                                        Importer&nbsp;Name
+                                    </th>
+                                    <th>
+                                        Steamer&nbsp;Name
+                                    </th>
+                                    <th>Product</th>
+                                    <th>S</th>
+                                    <th>Options</th>
+                                </tr>
+
+                            </thead>
+                            <tfoot>
+                                <tr>
+                                    <th colspan="12" style="text-align:center"></th>
+                                </tr>
+
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+
+    <script>
+        $(document).ready(function () {
+            //s alert(1);
+            $('#dataTables-example').dataTable({
+                "bServerSide": true,
+                "sAjaxSource": "@Url.Action("RTGateinGetAjaxData", "ImportRemoteGateIn")",
+                "bProcessing": true,
+                "bStateSave": true,
+                "aaSorting": [[1, "desc"]],
+                "oLanguage": {
+                    "sSearch": "Search: "
+                },
+                "aoColumns": [
+                    { "sName": "", "sClass": "col-md-1" },
+                    { "sName": " ", "sClass": "col-md-1" },
+                    { "sName": "", "sClass": "col-md-1" },
+                    { "sName": "", "sClass": "col-md-1" },
+                    { "sName": " ", "sClass": "col-md-1" },
+                    { "sName": "", "sClass": "col-md-1" },
+                    { "sName": "", "sClass": "col-md-1" },
+                    { "sName": " ", "sClass": "col-md-1" },
+                    { "sName": "", "sClass": "col-md-1" },
+                    { "sName": "", "sClass": "col-md-1" },
+                    {
+                        "sClass": "col-md-1 cent",
+                        "sName": "ID",
+                        "bSearchable": false,
+                        "bSortable": false,
+                        "fnRender": function (oObj) {
+                            if (oObj.aData[11] == 0) {
+                                return '<a class="btn btn-primary btn-xs" href="@Url.Action("Form", "ImportGateIn")/' +
+                                        oObj.aData[10] + ';' + oObj.aData[11] + '\">Gate In</a> ';
+                            }
+                        }
+                    }
+
+                ],
+                "fnFooterCallback": function (nRow, aaData, iStart, iEnd, aiDisplay) {
+                    var TNOS = 0; var FNOS = 0; var TUES = 0; var FNOSS = 0; var Total = 0;
+
+                    /*
+                     * Calculate the total market share for all browsers in this table (ie inc. outside
+                     * the pagination)
+                     */
+
+                    //alert(aiDisplay.length + "//" + nRow);
+                    for (var i = 0; i < aaData.length; i++) {
+                        // alert(aaData[4]);
+
+                    }
+
+
+
+                    /* Calculate the market share for browsers on this page */
+
+                    for (var i = 0; i < aaData.length; i++) {
+                        //alert("2" + aaData[aiDisplay[i]][3]);
+                        if (aaData[aiDisplay[i]][3] == 20) TNOS++;
+                        if (aaData[aiDisplay[i]][3] == 40) FNOS++;
+                        if (aaData[aiDisplay[i]][3] == 45) FNOSS++;
+                        TUES = eval(TNOS) + eval(2 * FNOS) + eval(2 * FNOSS);
+                        Total = eval(TNOS) + eval(FNOS) + eval(FNOSS);
+                        //  iPageMarket += aaData[aiDisplay[i]][4] * 1;
+                    }
+
+                    /* Modify the footer row to match what we want */
+                    //var nCells = nRow.getElementsByTagName('th'); nCells[0].innerHTML = '<span style="color:red">20":</span>' + eval(TNOS) + '&nbsp;&nbsp;&nbsp;&nbsp;<th></th>' + '<span style="color:red">40":</span>' + eval(FNOS) + '&nbsp;&nbsp;&nbsp;&nbsp;<th></th>' + '<span style="color:red">TUES:</span>' + eval(TUES)
+                    var nCells = nRow.getElementsByTagName('th'); nCells[0].innerHTML = '<span style="color:red">20":</span>' + eval(TNOS) + '&nbsp;&nbsp;&nbsp;&nbsp;<th></th>' + '<span style="color:red">40":</span>' + eval(FNOS) + '&nbsp;&nbsp;&nbsp;&nbsp;<th></th>' + '<span style="color:red">45":</span>' + eval(FNOSS) + '&nbsp;&nbsp;&nbsp;&nbsp;<th></th>' + '&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:red">TOTAL: </span>' + eval(Total) + '&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:red">TUES:</span>' + eval(TUES)
+
+                }
+            });
+
+
+            $("#from").datepicker({
+                defaultDate: "+1w",
+                changeMonth: true,
+                numberOfMonths: 3,
+                dateFormat: 'dd-mm-yy',
+                onClose: function (selectedDate) {
+                    $("#to").datepicker("option", "minDate", selectedDate);
+                }
+            });
+            $("#to").datepicker({
+                defaultDate: "+1w",
+                changeMonth: true,
+                numberOfMonths: 3,
+                dateFormat: 'dd-mm-yy',
+                onClose: function (selectedDate) {
+                    $("#from").datepicker("option", "maxDate", selectedDate);
+                }
+            });
+
+            //--------------print------------------------//
+
+            $(".print-invoice").on("click", function () {
+                var idx = $(this).attr('id');
+
+                turl = "http://216.172.100.137:8080/cfsrpt/print.php?id" + idx;
+                cpurl = "http://216.172.100.137:8080/cfsrpt/igatein.pdf";
+
+                var pdf = $.post(turl, function () {
+                    console.log("PDF generated successfully");
+                })
+                    .success(function () { })
+                    .complete(function () { });
+
+                pdf.complete(function () { window.open(cpurl, "_blank"); });
+
+                return false;
+
+            });
+
+            //end
+
+            //--------API Call----------------//
+            $(document).on("click", "#btnCallAPI", function () {
+                var btn = $(this);
+                btn.prop("disabled", true).html("Calling API...");
+                
+                var apiUrl = "@Url.Action("CallULIPLoginAPI", "ImportRemoteGateIn")";
+                if (!apiUrl || apiUrl === "") {
+                    apiUrl = "/ImportRemoteGateIn/CallULIPLoginAPI";
+                }
+                console.log("Calling API at URL:", apiUrl);
+                
+                $.ajax({
+                    url: apiUrl,
+                    type: "POST",
+                    cache: false,
+                    contentType: "application/json",
+                    dataType: "text",
+                    success: function (response) {
+                        btn.prop("disabled", false).html('<i class="fa fa-cloud"></i> Call API');
+                        console.log("API Response received:", response);
+                        console.log("Response type:", typeof response);
+                        console.log("Is Array:", Array.isArray(response));
+                        console.log("Full response stringified:", JSON.stringify(response, null, 2));
+                        
+                        // Parse the JSON string response
+                        if (typeof response === 'string') {
+                            try {
+                                response = JSON.parse(response);
+                            } catch (e) {
+                                console.error("Failed to parse response:", e);
+                                btn.prop("disabled", false).html('<i class="fa fa-cloud"></i> Call API');
+                                return;
+                            }
+                        }
+                        
+                        // Extract the ID from the response
+                        var apiId = null;
+                        
+                        // Try different ways to access the ID
+                        if (response && typeof response === 'object' && !Array.isArray(response)) {
+                            if (response.response && response.response.id) {
+                                apiId = response.response.id;
+                            } else if (response.response && typeof response.response.id === 'string') {
+                                apiId = response.response.id;
+                            } else if (response.response) {
+                                apiId = response.response.id || response.response["id"];
+                            }
+                        }
+                        
+                        // Convert to string if it's not already
+                        if (apiId) {
+                            apiId = String(apiId);
+                            console.log("API Response ID:", apiId);
+                        } else {
+                            // Debug: show what we got
+                            console.log("Could not find ID. Response structure:", JSON.stringify(response, null, 2));
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        btn.prop("disabled", false).html('<i class="fa fa-cloud"></i> Call API');
+                        var errorMsg = "Error calling API:\nStatus: " + status + "\nError: " + error;
+                        if (xhr.responseText) {
+                            errorMsg += "\nResponse: " + xhr.responseText.substring(0, 200);
+                        }
+                        console.error(errorMsg);
+                    }
+                });
+                return false;
+            });//End
+
+            //--------Gate In Button Click - Call API and Show Alert----------------//
+            $(document).on("click", "a.btn-primary.btn-xs", function (e) {
+                var linkText = $(this).text().trim();
+                var href = $(this).attr("href");
+                
+                // Check if this is a Gate In button by checking text and href pattern
+                if (linkText === "Gate In" || (href && href.indexOf("/ImportGateIn/Form/") !== -1)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    var originalHref = href;
+                    var btn = $(this);
+                    var originalText = btn.html();
+                    var bearerToken = null;
+                    
+                    // Get container number from the table row
+                    // Container number is in the 3rd column (index 2: Date=0, No=1, ContainerNo=2)
+                    var row = $(this).closest('tr');
+                    var containerNumber = "";
+                    
+                    // Try to get from table cell directly
+                    var containerCell = row.find('td').eq(2); // 3rd column (0-indexed)
+                    if (containerCell.length > 0) {
+                        containerNumber = containerCell.text().trim();
+                    }
+                    
+                    // Fallback: try to get from DataTable API if available
+                    if (!containerNumber) {
+                        try {
+                            var table = $('#dataTables-example').dataTable();
+                            var rowIndex = row.index();
+                            var rowData = table.fnGetData(row[0]);
+                            if (rowData && rowData.length > 2) {
+                                containerNumber = rowData[2];
+                            }
+                        } catch (e) {
+                            console.log("Could not get container number from DataTable API:", e);
+                        }
+                    }
+                    
+                    console.log("Container Number:", containerNumber);
+                    
+                    btn.prop("disabled", true).html("Calling API...");
+                    
+                    var apiUrl = "@Url.Action("CallULIPLoginAPI", "ImportRemoteGateIn")";
+                    if (!apiUrl || apiUrl === "") {
+                        apiUrl = "/ImportRemoteGateIn/CallULIPLoginAPI";
+                    }
+                    console.log("Calling API at URL:", apiUrl);
+                    
+                    $.ajax({
+                        url: apiUrl,
+                        type: "POST",
+                        cache: false,
+                        contentType: "application/json",
+                        dataType: "text",
+                        success: function (response) {
+                            btn.prop("disabled", false).html(originalText);
+                            console.log("API Response received:", response);
+                            console.log("Response type:", typeof response);
+                            console.log("Is Array:", Array.isArray(response));
+                            console.log("Full response stringified:", JSON.stringify(response, null, 2));
+                            
+                            // Handle if response is a string (needs parsing)
+                            if (typeof response === 'string') {
+                                try {
+                                    response = JSON.parse(response);
+                                } catch (e) {
+                                    console.error("Failed to parse response:", e);
+                                }
+                            }
+                            
+                            // Extract the ID from the response
+                            var apiId = null;
+                            
+                            // Try different ways to access the ID
+                            if (response && typeof response === 'object' && !Array.isArray(response)) {
+                                if (response.response && response.response.id) {
+                                    apiId = response.response.id;
+                                } else if (response.response && typeof response.response.id === 'string') {
+                                    apiId = response.response.id;
+                                } else if (response.response) {
+                                    // If response.response is an object, try to get id property
+                                    apiId = response.response.id || response.response["id"];
+                                }
+                            }
+                            
+                            // Convert to string if it's not already
+                            if (apiId) {
+                                apiId = String(apiId);
+                                bearerToken = apiId;
+                                console.log("API Response ID:", apiId);
+                                
+                                // Call the second API directly
+                                if (containerNumber) {
+                                    btn.prop("disabled", true).html("Calling LDB API...");
+                                    
+                                    var ldbApiUrl = "@Url.Action("CallULIPLDBAPI", "ImportRemoteGateIn")";
+                                    if (!ldbApiUrl || ldbApiUrl === "") {
+                                        ldbApiUrl = "/ImportRemoteGateIn/CallULIPLDBAPI";
+                                    }
+                                    
+                                    if (!bearerToken) {
+                                        console.error("Bearer token not available. Please try again.");
+                                        btn.prop("disabled", false).html(originalText);
+                                        // Still navigate to form even if token is missing
+                                        window.location.href = originalHref;
+                                        return;
+                                    }
+
+                                    $.ajax({
+                                        url: ldbApiUrl,
+                                        type: "POST",
+                                        cache: false,
+                                        contentType: "application/json",
+                                        data: JSON.stringify({ containerNumber: containerNumber, bearerToken: bearerToken }),
+                                        dataType: "text",
+                                        success: function (ldbResponse) {
+                                            btn.prop("disabled", false).html(originalText);
+                                            console.log("LDB API Response received:", ldbResponse);
+                                            
+                                            // Parse response if it's a string
+                                            if (typeof ldbResponse === 'string') {
+                                                try {
+                                                    ldbResponse = JSON.parse(ldbResponse);
+                                                } catch (e) {
+                                                    console.error("Failed to parse LDB response:", e);
+                                                }
+                                            }
+                                            
+                                            // Log the LDB API result
+                                            console.log("LDB API Result:", ldbResponse);
+                                            
+                                            // Store LDB data in Session via AJAX call
+                                            var ldbDataJson = JSON.stringify(ldbResponse);
+                                            var storeLdbUrl = "@Url.Action("StoreLDBDataInSession", "ImportRemoteGateIn")";
+                                            
+                                            $.ajax({
+                                                url: storeLdbUrl,
+                                                type: "POST",
+                                                contentType: "application/json",
+                                                data: ldbDataJson,
+                                                dataType: "json",
+                                                success: function (storeResponse) {
+                                                    if (storeResponse.success) {
+                                                        // Navigate to the form after storing data in Session
+                                                        window.location.href = originalHref;
+                                                    } else {
+                                                        console.error("Error storing LDB data: " + storeResponse.message);
+                                                        // Still navigate to form
+                                                        window.location.href = originalHref;
+                                                    }
+                                                },
+                                                error: function (xhr, status, error) {
+                                                    console.error("Error storing LDB data:", error);
+                                                    // Still navigate to form even if storage fails
+                                                    window.location.href = originalHref;
+                                                }
+                                            });
+                                        },
+                                        error: function (xhr, status, error) {
+                                            btn.prop("disabled", false).html(originalText);
+                                            var errorMsg = "Error calling LDB API:\nStatus: " + status + "\nError: " + error;
+                                            if (xhr.responseText) {
+                                                errorMsg += "\nResponse: " + xhr.responseText.substring(0, 200);
+                                            }
+                                            console.error(errorMsg);
+                                            // Still navigate to form even if LDB API fails
+                                            window.location.href = originalHref;
+                                        }
+                                    });
+                                } else {
+                                    // No container number, just navigate
+                                    window.location.href = originalHref;
+                                }
+                            } else {
+                                // Debug: show what we got
+                                console.log("Could not find ID. Response structure:", JSON.stringify(response, null, 2));
+                                // Still navigate to form even if ID not found
+                                window.location.href = originalHref;
+                            }
+                        },
+                        error: function (xhr, status, error) {
+                            btn.prop("disabled", false).html(originalText);
+                            var errorMsg = "Error calling API:\nStatus: " + status + "\nError: " + error;
+                            if (xhr.responseText) {
+                                errorMsg += "\nResponse: " + xhr.responseText.substring(0, 200);
+                            }
+                            console.error(errorMsg);
+                            // Still navigate to form even if API fails
+                            window.location.href = originalHref;
+                        }
+                    });
+                    return false;
+                }
+            });//End
+
+            //--------Delete record----------------//
+            $(document).on("click", "a.del", function () {
+                var r = confirm("Are you sure to delete this record ?");
+
+                if (r == true) {
+                    var idx = $(this).attr('id');
+                    base = window.location.origin;
+                    $.post(base + "/ImportRemoteGateIn/Del",
+                        {
+                            id: idx, fld: "GATEINDETAIL"
+                        },
+                        function (data, status) {
+                            console.log(data);
+                            if (data == "Deleted Successfully ...")
+                                location.replace(base + "/ImportRemoteGateIn");
+                        });
+                }
+                return false;
+            });//End
+        });
+    </script>
+}
+

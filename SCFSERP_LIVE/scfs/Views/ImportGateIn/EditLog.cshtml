@@ -1,0 +1,339 @@
+@{
+    ViewBag.Title = "Edit log";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <h2 class="page-header">Edit log</h2>
+            <p class="text-muted">Choose a module to view the edit history. Start with Gate In.</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-primary">
+                <div class="panel-heading">
+                    <h3 class="panel-title"><i class="fa fa-sign-in"></i> Import Gate In</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Import operations, including field-wise old and new values, who changed it, and when.</p>
+                    <form method="get" action="@Url.Action("EditLogGateIn", "ImportGateIn")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="gidid" class="control-label">Filter by GIDID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="gidid" name="gidid" placeholder="e.g. 12345" />
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fa fa-sign-in"></i> Import GateIn
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-success">
+                <div class="panel-heading">
+                    <h3 class="panel-title"><i class="fa fa-sign-out"></i> Export Gate In</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Export operations, including field-wise old and new values, who changed it, and when.</p>
+                    <form method="get" action="@Url.Action("EditLogGateIn", "ExportGateIn")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="export_gidid" class="control-label">Filter by GIDID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="export_gidid" name="gidid" placeholder="e.g. 12345" />
+                        </div>
+                        <button type="submit" class="btn btn-success btn-lg">
+                            <i class="fa fa-sign-out"></i> Export GateIn
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-info">
+                <div class="panel-heading">
+                    <h3 class="panel-title"><i class="fa fa-lock"></i> Bond Gate In</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Bond Gate In operations, including field-wise old and new values, who changed it, and when.</p>
+                    <form method="get" action="@Url.Action("EditLogGateIn", "BondGateIn")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="bond_gidid" class="control-label">Filter by GIDID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="bond_gidid" name="gidid" placeholder="e.g. 12345" />
+                        </div>
+                        <button type="submit" class="btn btn-info btn-lg">
+                            <i class="fa fa-lock"></i> Bond GateIn
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-warning">
+                <div class="panel-heading">
+                    <h3 class="panel-title"><i class="fa fa-ticket"></i> Vehicle Ticket Import</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Vehicle Ticket Import operations, including field-wise old and new values, who changed it, and when.</p>
+                    <form method="get" action="@Url.Action("EditLogVehicleTicket", "ImportVehicleTicket")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="vt_vtdid" class="control-label">Filter by VTDID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="vt_vtdid" name="vtdid" placeholder="e.g. 222394" />
+                        </div>
+                        <button type="submit" class="btn btn-warning btn-lg">
+                            <i class="fa fa-ticket"></i> Vehicle Ticket
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-danger">
+                <div class="panel-heading">
+                    <h3 class="panel-title"><i class="fa fa-export"></i> ExBond GateIn Detail</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for ExBond Gate In operations, including field-wise old and new values, who changed it, and when.</p>
+                    <form method="get" action="@Url.Action("EditLogGateInExBond", "ImportGateIn")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="exbond_gidid" class="control-label">Filter by GIDID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="exbond_gidid" name="gidid" placeholder="e.g. 12345" />
+                        </div>
+                        <button type="submit" class="btn btn-danger btn-lg">
+                            <i class="fa fa-export"></i> ExBond GateIn
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title"><i class="fa fa-ticket"></i> ExBond Vehicle Ticket</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for ExBond Vehicle Ticket operations, including field-wise old and new values, who changed it, and when.</p>
+                    <form method="get" action="@Url.Action("EditLogVehicleTicket", "ExBondVehicleTicket")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="exbond_vt_vtdid" class="control-label">Filter by VTDID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="exbond_vt_vtdid" name="vtdid" placeholder="e.g. 12345" />
+                        </div>
+                        <button type="submit" class="btn btn-default btn-lg">
+                            <i class="fa fa-ticket"></i> ExBond Vehicle Ticket
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-primary">
+                <div class="panel-heading">
+                    <h3 class="panel-title"><i class="fa fa-archive"></i> Import DeStuff</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Import DeStuff operations, including field-wise old and new values, who changed it, and when.</p>
+                    <form method="get" action="@Url.Action("EditLogDeStuff", "ImportDeStuff")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="destuff_aslmid" class="control-label">Filter by ASLMID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="destuff_aslmid" name="aslmid" placeholder="e.g. 12345" />
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fa fa-archive"></i> Import DeStuff
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-success">
+                <div class="panel-heading">
+                    <h3 class="panel-title"><i class="fa fa-truck"></i> Import Load Slip</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Import Load Slip operations, including field-wise old and new values, who changed it, and when.</p>
+                    <form method="get" action="@Url.Action("EditLogLoadSlip", "ImportLoadSlip")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="loadslip_aslmid" class="control-label">Filter by ASLMID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="loadslip_aslmid" name="aslmid" placeholder="e.g. 12345" />
+                        </div>
+                        <button type="submit" class="btn btn-success btn-lg">
+                            <i class="fa fa-truck"></i> Import Load Slip
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-info">
+                <div class="panel-heading">
+                    <h3 class="panel-title"><i class="fa fa-file-text"></i> Open Sheet</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Open Sheet operations, including field-wise old and new values, who changed it, and when.</p>
+                    <form method="get" action="@Url.Action("EditLogOpenSheet", "OpenSheet")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="opensheet_osmid" class="control-label">Filter by OSMID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="opensheet_osmid" name="osmid" placeholder="e.g. 12345" />
+                        </div>
+                        <button type="submit" class="btn btn-info btn-lg">
+                            <i class="fa fa-file-text"></i> Open Sheet
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-warning">
+                <div class="panel-heading">
+                    <h3 class="panel-title"><i class="fa fa-truck"></i> Import Truck Out</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Import Truck Out operations, including field-wise old and new values, who changed it, and when.</p>
+                    <form method="get" action="@Url.Action("EditLogTruckOut", "ImportTruckOut")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="truckout_godid" class="control-label">Filter by GODID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="truckout_godid" name="godid" placeholder="e.g. 12345" />
+                        </div>
+                        <button type="submit" class="btn btn-warning btn-lg">
+                            <i class="fa fa-truck"></i> Import Truck Out
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-default" style="border-color: #5bc0de;">
+                <div class="panel-heading" style="background-color: #5bc0de; color: white;">
+                    <h3 class="panel-title"><i class="fa fa-file-invoice"></i> Import Invoice</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Import Invoice operations, including field-wise old and new values, who changed it, and when. Values are shown by version.</p>
+                    <form method="get" action="@Url.Action("EditLogInvoice", "ImportInvoice")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="invoice_tranmid" class="control-label">Filter by TRANMID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="invoice_tranmid" name="tranmid" placeholder="e.g. 100180" />
+                        </div>
+                        <button type="submit" class="btn btn-lg" style="background-color: #5bc0de; color: white; border-color: #46b8da;">
+                            <i class="fa fa-file-invoice"></i> Import Invoice
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-default" style="border-color: #9b59b6;">
+                <div class="panel-heading" style="background-color: #9b59b6; color: white;">
+                    <h3 class="panel-title"><i class="fa fa-file-alt"></i> Import Manual Bill</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Import Manual Bill operations, including field-wise old and new values, who changed it, and when. Values are shown by version.</p>
+                    <form method="get" action="@Url.Action("EditLogManualBill", "ImportManualBill")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="manualbill_tranmid" class="control-label">Filter by TRANMID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="manualbill_tranmid" name="tranmid" placeholder="e.g. 100207" />
+                        </div>
+                        <button type="submit" class="btn btn-lg" style="background-color: #9b59b6; color: white; border-color: #8e44ad;">
+                            <i class="fa fa-file-alt"></i> Import Manual Bill
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-default" style="border-color: #27ae60;">
+                <div class="panel-heading" style="background-color: #27ae60; color: white;">
+                    <h3 class="panel-title"><i class="fa fa-file-export"></i> Export Manual Bill</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Export Manual Bill operations, including field-wise old and new values, who changed it, and when. Values are shown by version.</p>
+                    <form method="get" action="@Url.Action("EditLogExportManualBill", "ExportManualBill")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="exportmanualbill_tranmid" class="control-label">Filter by TRANMID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="exportmanualbill_tranmid" name="tranmid" placeholder="e.g. 100207" />
+                        </div>
+                        <button type="submit" class="btn btn-lg" style="background-color: #27ae60; color: white; border-color: #229954;">
+                            <i class="fa fa-file-export"></i> Export Manual Bill
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-default" style="border-color: #e67e22;">
+                <div class="panel-heading" style="background-color: #e67e22; color: white;">
+                    <h3 class="panel-title"><i class="fa fa-truck"></i> Delivery Order</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Delivery Order operations, including field-wise old and new values, who changed it, and when. Values are shown by version.</p>
+                    <form method="get" action="@Url.Action("EditLogDeliveryOrder", "DeliveryOrder")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="deliveryorder_domid" class="control-label">Filter by DOMID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="deliveryorder_domid" name="domid" placeholder="e.g. 60014" />
+                        </div>
+                        <button type="submit" class="btn btn-lg" style="background-color: #e67e22; color: white; border-color: #d35400;">
+                            <i class="fa fa-truck"></i> Delivery Order
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-default" style="border-color: #16a085;">
+                <div class="panel-heading" style="background-color: #16a085; color: white;">
+                    <h3 class="panel-title"><i class="fa fa-box"></i> Stuffing</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Stuffing operations, including field-wise old and new values, who changed it, and when. Values are shown by version.</p>
+                    <form method="get" action="@Url.Action("EditLogStuffing", "Stuffing")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="stuffing_stfmid" class="control-label">Filter by STFMID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="stuffing_stfmid" name="stfmid" placeholder="e.g. 24469" />
+                        </div>
+                        <button type="submit" class="btn btn-lg" style="background-color: #16a085; color: white; border-color: #138d75;">
+                            <i class="fa fa-box"></i> Stuffing
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-default" style="border-color: #e74c3c;">
+                <div class="panel-heading" style="background-color: #e74c3c; color: white;">
+                    <h3 class="panel-title"><i class="fa fa-file-invoice-dollar"></i> Stuffing Bill</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Stuffing Bill operations, including field-wise old and new values, who changed it, and when. Values are shown by version.</p>
+                    <form method="get" action="@Url.Action("EditLogStuffingBill", "StuffingBill")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="stuffingbill_tranmid" class="control-label">Filter by TRANMID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="stuffingbill_tranmid" name="tranmid" placeholder="e.g. 100207" />
+                        </div>
+                        <button type="submit" class="btn btn-lg" style="background-color: #e74c3c; color: white; border-color: #c0392b;">
+                            <i class="fa fa-file-invoice-dollar"></i> Stuffing Bill
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-default" style="border-color: #f39c12;">
+                <div class="panel-heading" style="background-color: #f39c12; color: white;">
+                    <h3 class="panel-title"><i class="fa fa-lock"></i> Seal</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Seal operations, including field-wise old and new values, who changed it, and when. Values are shown by version.</p>
+                    <form method="get" action="@Url.Action("EditLogSeal", "Seal")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="seal_stfmid" class="control-label">Filter by STFMID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="seal_stfmid" name="stfmid" placeholder="e.g. 12345" />
+                        </div>
+                        <button type="submit" class="btn btn-lg" style="background-color: #f39c12; color: white; border-color: #e67e22;">
+                            <i class="fa fa-lock"></i> Seal
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

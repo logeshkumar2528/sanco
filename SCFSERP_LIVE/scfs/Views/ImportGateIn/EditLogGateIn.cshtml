@@ -1,0 +1,742 @@
+@model IEnumerable<scfs_erp.Models.GateInDetailEditLogRow>
+@{
+    ViewBag.Title = "Gate In - Edit log";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    
+    // Determine module and controller from ViewBag or Request
+    var module = ViewBag.Module as string;
+    var controllerName = "ImportGateIn";
+    var idParamName = "gidid";
+    var idParamValue = Request["gidid"] ?? Request["vtdid"];
+    
+    if (module == "ExportGateIn")
+    {
+        controllerName = "ExportGateIn";
+    }
+    else if (module == "ImportVehicleTicket")
+    {
+        controllerName = "ImportVehicleTicket";
+        idParamName = "vtdid";
+    }
+    else if (module == "BondGateIn")
+    {
+        controllerName = "BondGateIn";
+    }
+    else if (module == "ImportTruckOut")
+    {
+        controllerName = "ImportTruckOut";
+        idParamName = "godid";
+        idParamValue = Request["godid"] ?? Request["gidid"];
+    }
+    else if (module == "ImportInvoice")
+    {
+        controllerName = "ImportInvoice";
+        idParamName = "tranmid";
+        idParamValue = Request["tranmid"] ?? Request["gidid"];
+    }
+    else if (module == "ImportManualBill")
+    {
+        controllerName = "ImportManualBill";
+        idParamName = "tranmid";
+        idParamValue = Request["tranmid"] ?? Request["gidid"];
+    }
+    else if (module == "ExportManualBill")
+    {
+        controllerName = "ExportManualBill";
+        idParamName = "tranmid";
+        idParamValue = Request["tranmid"] ?? Request["gidid"];
+    }
+    else if (module == "DeliveryOrder")
+    {
+        controllerName = "DeliveryOrder";
+        idParamName = "domid";
+        idParamValue = Request["domid"] ?? Request["gidid"];
+    }
+    else if (module == "Stuffing")
+    {
+        controllerName = "Stuffing";
+        idParamName = "stfmid";
+        idParamValue = Request["stfmid"] ?? Request["gidid"];
+    }
+    else if (module == "StuffingBill")
+    {
+        controllerName = "StuffingBill";
+        idParamName = "tranmid";
+        idParamValue = Request["tranmid"] ?? Request["gidid"];
+    }
+    else if (module == "ExBondGateIn")
+    {
+        controllerName = "ImportGateIn";
+        idParamName = "gidid";
+        idParamValue = Request["gidid"];
+    }
+    
+    // Map database field names to user-friendly display names
+    var fieldNameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        {"GIDATE", "Gate In Date"}, {"GITIME", "Gate In Time"}, {"GICCTLDATE", "Port Out Date"}, {"GICCTLTIME", "Port Out Time"},
+        {"IGMDATE", "IGM Date"}, {"BOEDATE", "BOE Date"},
+        {"GINO", "Gate In No"}, {"GIDNO", module == "ImportVehicleTicket" ? "Vehicle Ticket Detail No" : "Gate In Detail No"}, {"GPREFNO", "GP Reference No"}, {"IGMNO", "IGM No"},
+        {"GPLNO", "GPL No"}, {"BLNO", "BL No"}, {"BOENO", "BOE No"}, {"ESBNO", "ESB No"}, {"GPNRNO", "GP NR No"},
+        {"EMONO", "IMO No"}, {"EEGMNO", "EGMNO"}, {"EVSLRNO", "Vessel Rotation No"},
+        {"CONTNRNO", "Container No"}, {"CONTNRSID", "Container Size"}, {"CONTNRTID", "Container Type"},
+        {"LPSEALNO", "W/H Point"}, {"CSEALNO", "Custom Seal No"}, {"GIISOCODE", "ISO Code"},
+        {"VHLNO", "Vehicle No"}, {"DRVNAME", "Driver Name"}, {"DRVMBLNO", "Driver Mobile No"},
+        {"DRVLCNO", "Driver License No"}, {"GPWTYPE", "Weightment"}, {"GPSTYPE", "S.Amend / Mismatch"},
+        {"TRNSPRTNAME", "Transporter Name"}, {"IMPRTNAME", "Importer Name"}, {"STMRNAME", "Shipping Line Name"},
+        {"CHANAME", "CHA Name"}, {"BCHANAME", "Broker CHA Name"}, {"EXPRTRNAME", "Exporter Name"},
+        {"CLNTNAME", "Client Name"}, {"SHPRNAME", "Shipper Name"},
+        {"VSLNAME", "Vessel Name"}, {"VOYNO", "Voyage No"},
+        {"PRDTDESC", "Product Description"}, {"PRDTGID", "Product Category"}, {"PRDTTID", "Product Type"},
+        {"GPWGHT", "weighment"}, {"GPNOP", "NOP"},
+        {"ROWID", "Row"}, {"SLOTID", "Slot"}, {"STAGID", "Stage"}, {"GDWNID", "Godown"},
+        {"CFSNAME", "CFS Name"},
+        {"GIREMKRS", "Remarks"}, {"GPETYPE", "SSR/Escort"}, {"GPEAMT", "SSR/Escort"},
+        // Ensure GPETYPE is explicitly mapped - this is critical for SSR/Escort display
+        {"DISPSTATUS", "Status"}, {"GPSCNTYPE", "Scan Type"}, {"GPSCNMTYPE", "SAmend/Mismatch"},
+        {"GSEALTYPE", "Seal Type"},
+        // Additional mappings for controller-transformed field names and missing fields
+        {"In Date", "Gate In Date"}, {"In Time", "Gate In Time"}, // Controller transforms GIDATE/GITIME to "In Date"/"In Time"
+        {"Port Out Date", "Port Out Date"}, {"Port Out Time", "Port Out Time"}, // Controller transforms GICCTLDATE/GICCTLTIME
+        {"Weight", "weighment"}, // Controller transforms GPWGHT to "Weight"
+        {"Weightment", "Weightment"}, // Controller transforms GPWTYPE to "Weightment" (matches form label)
+        {"Scan Type", "SAmend/Mismatch"}, // Controller transforms GPSCNMTYPE to "Scan Type"
+        {"SSR/Escort", "SSR/Escort"}, // Controller transforms GPEAMT to "SSR/Escort"
+        {"S.Amend / Mismatch", "S.Amend / Mismatch"}, // Controller transforms GPSTYPE to "S.Amend / Mismatch" (matches form label)
+        {"GRADEID", "Refer(Plug)"}, {"GFCLTYPE", "FCL"},
+        // ExBond GateIn specific mappings (controller transforms these field names)
+        {"CHA Name", "CHA Name"}, {"Importer Name", "Importer Name"}, {"Bond No", "Bond No"},
+        {"Container Size", "Container Size"}, {"No.of Containers", "No.of Containers"}, {"Product Category", "Product Category"},
+        // ExBond fields
+        {"EBNDDNO", "Ex Bond No"}, {"EBNDNO", "No"}, {"EBNDDATE", "Ex Bond Delivery Date"},
+        {"EBNDBENO", "BE No"}, {"EBNDBEDATE", "BE Date"}, {"EBNDNOC", "No.of Containers"},
+        {"EBNDNOP", "NOP"}, {"EBNDSPC", "Space"}, {"EBNDCTYPE", "Bond Type"},
+        {"BNDID", "Bond No"}, {"EBNDEDATE", "Valid Till Date"},
+        // OpenSheet fields
+        {"OSBCHACATEAID", "CHA Address type"}, {"OSBBCHACATEAID", "CHA Address type"},
+        {"OSBCHASTATEID", "State"}, {"OSBBCHASTATEID", "Billing State Code"},
+        // Vehicle Ticket fields (only unique fields - VHLNO, DRVNAME, TRNSPRTNAME already exist above)
+        {"VTDATE", "Date"}, {"VTTIME", "Time"}, {"VTNO", "Ticket No"}, {"VTDNO", "Ticket Detail No"},
+        {"ASLDID", "ASL ID"}, {"VTDESC", "Description"},
+        {"VTQTY", "NOP"}, {"VTTYPE", "Type"}, {"VTSTYPE", "Status Type"}, {"VTREMRKS", "Remarks"},
+        {"VTAREA", "Space"}, {"EBVTNOC", "No.of Containers"},
+        {"GIDID", "Gate In ID"}, {"EGIDID", "Export Gate In ID"}, {"VTSSEALNO", "Seal No"},
+        {"VTCTYPE", "Container Type"}, {"CGIDID", "Cargo Gate In ID"}, {"STFDID", "Stuffing ID"},
+        {"EVLDATE", "Empty Vehicle Load Date"}, {"EVSDATE", "Empty Vehicle Stuff Date"}, {"ELRDATE", "Empty Load Return Date"},
+        {"GTRNSPRTNAME", "Other Transporter Name"},
+        {"QRCDIMGPATH", "QR Code Image Path"},
+        {"CHA_Name (GID)", "CHA Name"}, {"Broker_CHA_Name", "Broker CHA Name"},
+        {"Transporter_Name", "Transporter Name"}, {"Importer_Name", "Importer Name"},
+        // ImportManualBill and ImportInvoice fields
+        {"TRANDATE", "Date"}, {"TRANTIME", "Date/Time"}, {"TRANDNO", "Bill Number"}, {"TRANNO", "No"},
+        {"TRANREFNAME", "CHA"}, {"BANKMID", "Bank"}, {"LCATEID", "Labour"},
+        {"TRANMODE", "Mode"}, {"TRANMODEDETL", "Mode Detail"}, {"TRANGAMT", "Gross Amount"}, {"TRANNAMT", "Net Amount"},
+        {"TRANROAMT", "Round Off Amount"}, {"TRANREFAMT", "Amount"}, {"TRANRMKS", "Remarks"},
+        {"TRANCGSTAMT", "C.G.S.T."}, {"TRANSGSTAMT", "S.G.S.T."}, {"TRANIGSTAMT", "I.G.S.T."},
+        {"CATEAID", "Location"}, {"STATEID", "State"}, {"REGSTRID", "Tax Type"},
+        {"TRANIMPADDR1", "Address1"}, {"TRANIMPADDR2", "Address2"}, {"TRANIMPADDR3", "Address3"}, {"TRANIMPADDR4", "Address4"},
+        // ImportInvoice additional fields
+        {"TARIFFGID", "Tariff Group"}, {"TARIFFMID", "Tariff"}, {"TRANOTYPE", "Operation"},
+        {"TRANVDATE", "Validity Date"}, {"TRANDPNO", "Duty Paid No."}, {"TRANDSAMT", "Storage(Calc)"},
+        {"TRANCFID", "costfactor details"},
+        // ExportManualBill Detail fields
+        {"Detail.ACHEADID", "Account Head"}, {"Detail.TRANDDESC", "Bill Description"},
+        {"Detail.TRANDREFNO", "HSN Code"}, {"Detail.TRAND_STRG_CGST_EXPRN", "GST %"}, {"Detail.TRANDGAMT", "Amount"},
+        {"PRCSDATE", "Process Date"},
+        {"TRANBTYPE", "Bill Type"}, {"TRANREFNO", "Number"}, {"TRANREFDATE", "Date"}, {"TRANREFBNAME", "Bank"},
+        {"TRANTALLYCHANAME", "Tally CHA"}, {"TCATEAID", "Tally CHA Location"}, 
+        {"TCATEAGSTNO", "GST NO"}, {"TSTATEID", "State"},
+        // DeliveryOrder fields
+        {"DODATE", "Date"}, {"DOTIME", "Time"}, {"DODNO", "DO Number"}, {"DONO", "No"},
+        {"DOREFID", "CHA"}, {"DOREFNAME", "CHA"}, {"DOMODE", "Mode"}, {"DOMODEDETL", "Mode Detail"}, {"DOREFAMT", "Amount"},
+        {"DOREFNO", "Number"}, {"DOREFDATE", "Date"}, {"DOREFBNAME", "Bank"},
+        // Note: TARIFFGID, TARIFFMID, TRANDPNO, TRANVDATE already defined above in ImportInvoice section
+        // Stuffing fields
+        {"STFMID", "Primary"}, {"STFMDATE", "Date"}, {"STFMTIME", "Time"}, {"STFMNO", "No"}, {"STFMDNO", "No"},
+        {"CHAID", "CHA"},
+        {"EOPTID", "Operation Type"}, {"STFBILLEDTO", "Billed To"}, {"STFBILLREFNAME", "Billing Name"},
+        {"STFCATEAID", "CHA Location"}, {"CATEAGSTNO", "CHA GST No"},
+        {"STFBCATEAID", "Billing Location"}, {"STFBCHASTATEID", "State"}, {"STFBCHAGSTNO", "Billing GST No"},
+        {"STFBCHAADDR1", "Billing Address 1"}, {"STFBCHAADDR2", "Billing Address 2"}, {"STFBCHAADDR3", "Billing Address 3"}, {"STFBCHAADDR4", "Billing Address 4"},
+        {"STF_SBILL_RNO", "Shipping Bill No"}, {"STF_FORM13_RNO", "Form 13 No"}
+    };
+    
+    // Fields to exclude from display
+    var excludedFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "Seal Type", "GSEALTYPE",
+        // Removed "Status Type", "GPSTYPE" from exclude - user wants to see these in edit log
+        // Removed "Vehicle Type", "GPWTYPE" from exclude - user wants to see these in edit log
+        "Valid Till Date", "EBNDEDATE", // ExBond GateIn - exclude Valid Till Date
+        "LCATEID", "LCATENAME", "STFMNAME", "STFBILLREFID", // Stuffing - exclude Labour details and duplicate CHA/Billing names
+        "Open Sheet L Name", "OSMLNAME", // OpenSheet - exclude Open Sheet L Name
+        "Inspection Type", "INSPTYPE", "Detail.Inspection Type", "Detail.INSPTYPE", // OpenSheet - exclude Inspection Type
+        "Handling Taxable Amount", "HANDL_TAXABLE_AMT", // ImportInvoice - exclude Handling Taxable Amount
+        "Pulse Storage Type", "TRAN_PULSE_STRG_TYPE", // ImportInvoice - exclude Pulse Storage Type
+        // ExportManualBill - exclude removed fields
+        "TRANREFID", "CHA", // ExportManualBill - exclude CHA ID (show name only)
+        "TRANAMTWRDS", "Amount in Words", // ExportManualBill - exclude Amount in Words
+        "TRANLMDATE", "Lorry Memo Date", // ExportManualBill - exclude Lorry Memo Date
+        "TRANLSDATE", "Lorry Slip Date", // ExportManualBill - exclude Lorry Slip Date
+        "HANDL_SGST_AMT", "HANDL_CGST_AMT", "HANDL_SGST_EXPRN", "HANDL_CGST_EXPRN", "HANDL_IGST_EXPRN", "HANDL_IGST_AMT", // ExportManualBill - exclude Handling GST fields
+        "STRG_IGST_AMT", "STRG_IGST_EXPRN", // ExportManualBill - exclude Storage IGST fields
+        "HANDL_TAXABLE_AMT", "STRG_TAXABLE_AMT", "HANDL_HSNCODE", "STRG_HSNCODE", // ExportManualBill - exclude Taxable Amount and HSN Code
+        "Handling SGST Amount", "Handling CGST Amount", "Handling SGST %", "Handling CGST %", "Handling IGST %", "Handling IGST Amount", // ExportManualBill - exclude friendly names
+        "Storage IGST Amount", "Storage IGST %", "Handling Taxable Amount", "Storage Taxable Amount", "Handling HSN Code", "Storage HSN Code", // ExportManualBill - exclude friendly names
+        // StuffingBill - exclude removed fields
+        "TRANHAMT", "Handling Amount", "TRANLMDATE", "TRANLSDATE", "TRANNARTN", "Narration", "TRANREFBNAME", "Bank" // StuffingBill - exclude Handling Amount, Lorry dates, Narration, and duplicate Bank
+    };
+    
+    // For ExBondGateIn, ImportLoadSlip, and OpenSheet, don't exclude Status - user wants to see it
+    if (module != "ExBondGateIn" && module != "ImportLoadSlip" && module != "OpenSheet")
+    {
+        excludedFields.Add("Status");
+        excludedFields.Add("DISPSTATUS");
+    }
+    
+    Func<string, string> getFriendlyName = fieldName => 
+    {
+        // If the field name is already friendly (from controller mapping), return as-is
+        if (fieldNameMap.ContainsKey(fieldName)) return fieldNameMap[fieldName];
+        // If it's already a friendly name (contains spaces, not all caps), return as-is
+        if (!string.IsNullOrEmpty(fieldName) && fieldName.Contains(" ") && !fieldName.All(c => char.IsUpper(c) || char.IsDigit(c) || c == '_'))
+            return fieldName;
+        // Try to clean up field name by removing underscores and suffixes
+        var cleaned = fieldName.Replace("_", " ").Replace(" (GID)", "").Trim();
+        return cleaned;
+    };
+}
+
+<link href="~/Content/dataTables.bootstrap.css" rel="stylesheet" />
+<style>
+    /* Sticky table header for better visibility */
+    #logTable thead th { position: sticky; top: 0; background: #2e3e4e; color: #fff; z-index: 2; }
+    #logTable thead input, #logTable thead select { width: 100%; font-size: 12px; padding: 2px 6px; }
+    .old-badge { background: #f2dede; color: #a94442; border-radius: 3px; padding: 2px 6px; display: inline-block; }
+    .new-badge { background: #dff0d8; color: #3c763d; border-radius: 3px; padding: 2px 6px; display: inline-block; }
+    .field-label { font-weight: 600; }
+    .toolbar { margin: 10px 0; }
+    .toolbar .form-control { display: inline-block; width: auto; min-width: 180px; }
+    .group-header { background: #eef5ff; font-weight: bold; }
+    .nowrap { white-space: nowrap; }
+    .w-150 { min-width:150px; }
+    .w-220 { min-width:220px; }
+    .muted { color:#777; font-size:12px; }
+    .legend span { margin-right: 10px; }
+    .legend .old-badge, .legend .new-badge { padding: 3px 8px; }
+    td.details-control { cursor: pointer; text-align: center; width: 34px; }
+    td.details-control .toggle { display:inline-block; width:18px; height:18px; line-height:16px; border-radius:9px; background:#2e86de; color:#fff; font-weight:bold; }
+    tr.shown td.details-control .toggle { background:#c0392b; }
+    .filter-group { display:inline-block; margin-left:10px; }
+</style>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <h2 class="page-header">@(module == "ImportVehicleTicket" ? "Vehicle Ticket" : module == "ExportGateIn" ? "Export Gate In" : module == "BondGateIn" ? "Bond Gate In" : module == "ExBondGateIn" ? "EXbond Gate In" : module == "ImportTruckOut" ? "Import Truck Out" : module == "ImportInvoice" ? "Import Invoice" : module == "ImportManualBill" ? "Import Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : "Gate In") - Edit log</h2>
+        </div>
+    </div>
+
+    <div class="row" style="margin-top:5px;">
+        <div class="col-md-12">
+            <div class="box">
+                <div class="box-header">
+                    <div class="box-name">
+                        <i class="fa fa-history"></i>
+                        <span>Edit Log Entries</span>
+                    </div>
+                </div>
+                <div class="box-content">
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            <strong>Log Entries</strong>
+                            <span class="muted"> – Click a column header to sort. Use the second header row to filter specific columns.</span>
+                        </div>
+                        <div class="panel-body">
+                    @if (TempData["Err"] != null)
+                    {
+                        <div class="alert alert-danger">@TempData["Err"]</div>
+                    }
+                    <div class="toolbar">
+                        @* Compare form (GET) *@
+                        <form class="form-inline" method="get" action="@Url.Action(module == "ImportVehicleTicket" ? "EditLogVehicleTicketCompare" : module == "ImportTruckOut" ? "EditLogTruckOutCompare" : module == "ImportInvoice" ? "EditLogInvoiceCompare" : module == "ImportManualBill" ? "EditLogManualBillCompare" : module == "ExportManualBill" ? "EditLogExportManualBillCompare" : module == "DeliveryOrder" ? "EditLogDeliveryOrderCompare" : module == "Stuffing" ? "EditLogStuffingCompare" : module == "StuffingBill" ? "EditLogStuffingBillCompare" : module == "ExBondGateIn" ? "EditLogGateInExBondCompare" : "EditLogGateInCompare", controllerName)" style="margin-top:8px;">
+                            <div class="form-group">
+                                <label for="cmpGidCompare">Compare Versions for @(module == "ImportVehicleTicket" ? "Vehicle Ticket" : module == "ImportTruckOut" ? "Truck Out" : module == "ImportInvoice" ? "Invoice" : module == "ImportManualBill" ? "Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "ExBondGateIn" ? "Ex Bond" : "GateIn") Number</label>
+                            </div>
+                            <div class="form-group">
+                                <input type="text" id="cmpGidCompare" name="@idParamName" class="form-control input-sm" placeholder="Enter @(module == "ImportVehicleTicket" ? "Vehicle Ticket" : module == "ImportTruckOut" ? "Truck Out" : module == "ImportInvoice" ? "Invoice" : module == "ImportManualBill" ? "Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "ExBondGateIn" ? "Ex Bond" : "GateIn") Number" value="@idParamValue" required />
+                            </div>
+                            <div class="form-group">
+                                <label for="cmpA">Version A</label>
+                                <input type="text" id="cmpA" name="versionA" class="form-control input-sm" placeholder="e.g. 0 or v0" required />
+                            </div>
+                            <div class="form-group">
+                                <label for="cmpB">Version B</label>
+                                <input type="text" id="cmpB" name="versionB" class="form-control input-sm" placeholder="e.g. 1 or 2" required />
+                            </div>
+                            <div class="form-group">
+                                <button id="goCompare" type="submit" class="btn btn-info btn-sm"><i class="fa fa-exchange"></i> Compare</button>
+                            </div>
+                            <div class="legend pull-right">
+                                <span><span class="old-badge">Old</span></span>
+                                <span><span class="new-badge">New</span></span>
+                            </div>
+                        </form>
+                    </div>
+                    @if (Model != null && Model.Any())
+                    {
+                        // For EXbond, show all versions including v0
+                        var showAllVersions = (module == "ExBondGateIn");
+                        var hasNonBaseline = Model.Any(row => {
+                            var vraw = (row.Version ?? string.Empty).Trim();
+                            if (showAllVersions) return true; // Show all versions for EXbond
+                            return !string.IsNullOrEmpty(vraw) && vraw != "0" && !vraw.Equals("V0", StringComparison.OrdinalIgnoreCase) && !vraw.StartsWith("v0-", StringComparison.OrdinalIgnoreCase) && !vraw.StartsWith("V0-", StringComparison.OrdinalIgnoreCase);
+                        });
+                        
+                        if (hasNonBaseline || showAllVersions)
+                        {
+                            <div class="table-responsive">
+                                <table id="logTable" class="table table-striped table-bordered table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th></th>
+                                            <th class="nowrap w-150">Changed On</th>
+                                            <th class="nowrap">@(module == "ImportVehicleTicket" ? "Vehicle Ticket Number" : module == "ImportTruckOut" ? "Truck Out Number" : module == "ImportInvoice" ? "Invoice Number" : module == "ImportManualBill" ? "Manual Bill Number" : module == "ExportManualBill" ? "Export Manual Bill Number" : module == "DeliveryOrder" ? "Delivery Order Number" : module == "Stuffing" ? "Stuffing Number" : module == "StuffingBill" ? "Stuffing Bill Number" : module == "ExBondGateIn" ? "Ex Bond Number" : "GateIn Number")</th>
+                                            <th class="nowrap">Version</th>
+                                            <th class="w-220">Field</th>
+                                            <th class="w-220">Old Value</th>
+                                            <th class="w-220">New Value</th>
+                                            <th class="nowrap">Changed By</th>
+                                            <th class="nowrap">Module</th>
+                                        </tr>
+                                        <!-- per-column filters -->
+                                        <tr>
+                                            <th></th>
+                                            <th><input type="text" placeholder="Search date/time" class="form-control input-sm" /></th>
+                                            <th><input type="text" placeholder="@(module == "ImportVehicleTicket" ? "Vehicle Ticket Number" : module == "ImportTruckOut" ? "Truck Out Number" : module == "ImportInvoice" ? "Invoice Number" : module == "ImportManualBill" ? "Manual Bill Number" : module == "ExportManualBill" ? "Export Manual Bill Number" : module == "DeliveryOrder" ? "Delivery Order Number" : module == "Stuffing" ? "Stuffing Number" : module == "StuffingBill" ? "Stuffing Bill Number" : module == "ExBondGateIn" ? "Ex Bond Number" : "GateIn Number")" class="form-control input-sm" /></th>
+                                            <th><input type="text" placeholder="Version" class="form-control input-sm" /></th>
+                                            <th><input type="text" placeholder="Field" class="form-control input-sm" /></th>
+                                            <th><input type="text" placeholder="Old value" class="form-control input-sm" /></th>
+                                            <th><input type="text" placeholder="New value" class="form-control input-sm" /></th>
+                                            <th><input type="text" placeholder="User" class="form-control input-sm" /></th>
+                                            <th><input type="text" placeholder="Module" class="form-control input-sm" /></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @{
+                                            // Track seen fields to prevent duplicates (especially for ExBondGateIn)
+                                            var seenFieldKeys = new HashSet<string>();
+                                        }
+                                        @foreach (var row in Model)
+                                        {
+                                            var vraw = (row.Version ?? string.Empty).Trim();
+                                            var isBaseline = string.IsNullOrEmpty(vraw) || vraw == "0" || vraw.Equals("V0", StringComparison.OrdinalIgnoreCase) || vraw.StartsWith("v0-", StringComparison.OrdinalIgnoreCase) || vraw.StartsWith("V0-", StringComparison.OrdinalIgnoreCase);
+                                            // For EXbond, show all versions including v0
+                                            if (!showAllVersions && isBaseline) { continue; }
+                                            
+                                            // Filter out excluded fields
+                                            var fieldName = (row.FieldName ?? string.Empty).Trim();
+                                            
+                                            // Prevent duplicate fields - especially "No.of Containers" for ExBondGateIn
+                                            var friendlyFieldName = getFriendlyName(fieldName);
+                                            var fieldKey = row.GIDNO + "|" + vraw + "|" + friendlyFieldName;
+                                            
+                                            // Skip if we've already seen this exact field (GIDNO + Version + FieldName combination)
+                                            if (seenFieldKeys.Contains(fieldKey))
+                                            {
+                                                continue;
+                                            }
+                                            seenFieldKeys.Add(fieldKey);
+                                            
+                                            // CRITICAL: Always show GPETYPE (SSR/Escort) - check before any filtering
+                                            // Check multiple ways to ensure we catch GPETYPE even with whitespace or case issues
+                                            var isGPETYPE = fieldName.Equals("GPETYPE", StringComparison.OrdinalIgnoreCase) ||
+                                                           fieldName.IndexOf("GPETYPE", StringComparison.OrdinalIgnoreCase) >= 0;
+                                            
+                                            // friendlyFieldName already set above
+                                            
+                                            // CRITICAL: Check if this is one of our target fields that must ALWAYS be shown
+                                            // These fields are stored in DB as: GPWGHT, GPEAMT, GPSCNMTYPE, GPSTYPE, GPETYPE, GRADEID, GFCLTYPE, GPWTYPE
+                                            // Controller transforms some of them to: Weight, SSR/Escort, Scan Type, etc.
+                                            // View maps them to: weighment, SSR/Escort, SAmend/Mismatch, etc.
+                                            // Also include ImportInvoice important fields: TARIFFGID, TARIFFMID
+                                            var isTargetField = fieldName.Equals("GPWGHT", StringComparison.OrdinalIgnoreCase) || 
+                                                                 fieldName.Equals("GPEAMT", StringComparison.OrdinalIgnoreCase) || 
+                                                                 fieldName.Equals("GPSCNMTYPE", StringComparison.OrdinalIgnoreCase) ||
+                                                                 fieldName.Equals("GPSTYPE", StringComparison.OrdinalIgnoreCase) ||
+                                                                 fieldName.Equals("GPETYPE", StringComparison.OrdinalIgnoreCase) ||
+                                                                 fieldName.Equals("GRADEID", StringComparison.OrdinalIgnoreCase) ||
+                                                                 fieldName.Equals("GFCLTYPE", StringComparison.OrdinalIgnoreCase) ||
+                                                                 fieldName.Equals("GPWTYPE", StringComparison.OrdinalIgnoreCase) ||
+                                                                 fieldName.Equals("TARIFFGID", StringComparison.OrdinalIgnoreCase) ||
+                                                                 fieldName.Equals("TARIFFMID", StringComparison.OrdinalIgnoreCase) ||
+                                                                 fieldName.Equals("Weight", StringComparison.OrdinalIgnoreCase) || 
+                                                                 fieldName.Equals("SSR/Escort", StringComparison.OrdinalIgnoreCase) || 
+                                                                 fieldName.Equals("Scan Type", StringComparison.OrdinalIgnoreCase) ||
+                                                                 friendlyFieldName.Equals("weighment", StringComparison.OrdinalIgnoreCase) ||
+                                                                 friendlyFieldName.Equals("SSR/Escort", StringComparison.OrdinalIgnoreCase) ||
+                                                                 friendlyFieldName.Equals("SAmend/Mismatch", StringComparison.OrdinalIgnoreCase) ||
+                                                                 friendlyFieldName.Equals("S.Amend / Mismatch", StringComparison.OrdinalIgnoreCase) ||
+                                                                 friendlyFieldName.Equals("Refer(Plug)", StringComparison.OrdinalIgnoreCase) ||
+                                                                 friendlyFieldName.Equals("FCL", StringComparison.OrdinalIgnoreCase) ||
+                                                                 friendlyFieldName.Equals("Weightment", StringComparison.OrdinalIgnoreCase) ||
+                                                                 friendlyFieldName.Equals("Tariff Group", StringComparison.OrdinalIgnoreCase) ||
+                                                                 friendlyFieldName.Equals("Tariff", StringComparison.OrdinalIgnoreCase) ||
+                                                                 // Fallback checks using Contains (case-insensitive)
+                                                                 fieldName.IndexOf("Weight", StringComparison.OrdinalIgnoreCase) >= 0 || 
+                                                                 fieldName.IndexOf("weighment", StringComparison.OrdinalIgnoreCase) >= 0 || 
+                                                                 fieldName.IndexOf("Escort", StringComparison.OrdinalIgnoreCase) >= 0 || 
+                                                                 fieldName.IndexOf("SSR", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                                 fieldName.IndexOf("Scan Type", StringComparison.OrdinalIgnoreCase) >= 0 || 
+                                                                 fieldName.IndexOf("Mismatch", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                                 fieldName.IndexOf("SAmend", StringComparison.OrdinalIgnoreCase) >= 0 || 
+                                                                 fieldName.IndexOf("GPSTYPE", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                                 fieldName.IndexOf("GPETYPE", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                                 fieldName.IndexOf("GRADEID", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                                 fieldName.IndexOf("GFCLTYPE", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                                 fieldName.IndexOf("TARIFFGID", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                                 fieldName.IndexOf("TARIFFMID", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                                 friendlyFieldName.IndexOf("weighment", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                                 friendlyFieldName.IndexOf("SSR", StringComparison.OrdinalIgnoreCase) >= 0 || 
+                                                                 friendlyFieldName.IndexOf("Escort", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                                 friendlyFieldName.IndexOf("Mismatch", StringComparison.OrdinalIgnoreCase) >= 0 || 
+                                                                 friendlyFieldName.IndexOf("SAmend", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                                 friendlyFieldName.IndexOf("Refer", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                                 friendlyFieldName.IndexOf("Plug", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                                 friendlyFieldName.IndexOf("FCL", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                                 friendlyFieldName.IndexOf("Tariff", StringComparison.OrdinalIgnoreCase) >= 0;
+                                            
+                                            // NEVER exclude target fields - always show them
+                                            // For target fields, bypass ALL exclusion checks
+                                            // CRITICAL: Explicitly check for GPETYPE to ensure it's never filtered
+                                            if (isTargetField || isGPETYPE)
+                                            {
+                                                // Force display - skip exclusion check entirely
+                                                // GPETYPE must always be visible
+                                            }
+                                            else if (excludedFields.Contains(fieldName) || excludedFields.Contains(friendlyFieldName))
+                                            {
+                                                continue;
+                                            }
+                                            
+                                            // Only show rows where values actually changed (old != new)
+                                            // Normalize values: handle null, empty, whitespace, and common "empty" representations
+                                            var oldVal = row.OldValue ?? string.Empty;
+                                            var newVal = row.NewValue ?? string.Empty;
+                                            
+                                            // Trim and normalize empty representations
+                                            oldVal = oldVal.Trim();
+                                            newVal = newVal.Trim();
+                                            
+                                            // Initialize empty flags - will be set based on field type
+                                            var oldIsEmpty = false;
+                                            var newIsEmpty = false;
+                                            
+                                            // For target fields, ALWAYS show them - skip all value filtering
+                                            // CRITICAL: Explicitly include GPETYPE check to ensure it's always displayed
+                                            if (isTargetField || isGPETYPE)
+                                            {
+                                                // Force display of target fields - don't apply any value filtering
+                                                // These are critical fields that must always be visible
+                                                // Set empty flags to false so they always display
+                                                oldIsEmpty = false;
+                                                newIsEmpty = false;
+                                                
+                                                // CRITICAL: For GPETYPE, GPSTYPE, GPWTYPE, always show even if values appear same
+                                                // This ensures we catch all changes including "1"->"0" or "YES"->"NO"
+                                                // Skip the value comparison check entirely for target fields
+                                            }
+                                            else
+                                            {
+                                                // For non-target fields, apply normal filtering
+                                                // Check if this is a numeric field (decimal/int) - don't treat "0" as empty for these
+                                                var isNumericField = fieldName.Contains("Weight") || fieldName.Contains("weighment") || 
+                                                                     fieldName.Contains("Escort") || fieldName.Contains("SSR") ||
+                                                                     fieldName.Contains("Scan Type") || fieldName.Contains("Mismatch") ||
+                                                                     fieldName.Contains("SAmend") || fieldName.Contains("CLEAN") ||
+                                                                     fieldName.Contains("MISMATCH") || fieldName.Contains("NOT SCANNED") ||
+                                                                     fieldName.Contains("GPWGHT") || fieldName.Contains("GPEAMT") || 
+                                                                     fieldName.Contains("GPSCNMTYPE") || fieldName.Contains("WGHT") || 
+                                                                     fieldName.Contains("AMT");
+                                                
+                                                // Treat common "empty" values as equivalent (but not "0" for numeric fields)
+                                                oldIsEmpty = string.IsNullOrEmpty(oldVal) || oldVal == "-" || oldVal == "(not set)" || oldVal == "null" || oldVal == "NULL" ||
+                                                             (!isNumericField && (oldVal == "0" || oldVal == "0.0" || oldVal == "0.00" || oldVal == "0.000" || oldVal == "0.0000"));
+                                                newIsEmpty = string.IsNullOrEmpty(newVal) || newVal == "-" || newVal == "(not set)" || newVal == "null" || newVal == "NULL" ||
+                                                             (!isNumericField && (newVal == "0" || newVal == "0.0" || newVal == "0.00" || newVal == "0.000" || newVal == "0.0000"));
+                                                
+                                                // If both are empty/equivalent, skip this row
+                                                if (oldIsEmpty && newIsEmpty)
+                                                {
+                                                    continue;
+                                                }
+                                                
+                                                // Compare values (case-insensitive) - skip if same
+                                                if (string.Equals(oldVal, newVal, StringComparison.OrdinalIgnoreCase))
+                                                {
+                                                    continue; // Skip rows where old and new values are the same
+                                                }
+                                            }
+                                            
+                                            <tr>
+                                                <td class="details-control"><span class="toggle">+</span></td>
+                                                <td class="nowrap">@row.ChangedOn.ToString("dd-MMM-yyyy HH:mm:ss")</td>
+                                                <td class="nowrap">@row.GIDNO</td>
+                                                <td class="nowrap">@vraw</td>
+                                                <td class="field-label">@friendlyFieldName</td>
+                                                <td>
+                                                    @{
+                                                        // Convert numeric values to friendly text for specific fields
+                                                        var displayOldVal = oldVal;
+                                                        // CRITICAL: Always convert GPETYPE values - this is SSR/Escort
+                                                        if (fieldName.Equals("GPETYPE", StringComparison.OrdinalIgnoreCase) || isGPETYPE)
+                                                        {
+                                                            if (displayOldVal == "1") { displayOldVal = "YES"; }
+                                                            else if (displayOldVal == "0") { displayOldVal = "NO"; }
+                                                            // Also handle if already converted to YES/NO
+                                                        }
+                                                        else if (fieldName.Equals("GPSTYPE", StringComparison.OrdinalIgnoreCase) || 
+                                                                 fieldName.Equals("GPWTYPE", StringComparison.OrdinalIgnoreCase))
+                                                        {
+                                                            if (displayOldVal == "1") { displayOldVal = "YES"; }
+                                                            else if (displayOldVal == "0") { displayOldVal = "NO"; }
+                                                        }
+                                                        else if (fieldName.Equals("GRADEID", StringComparison.OrdinalIgnoreCase))
+                                                        {
+                                                            if (displayOldVal == "2") { displayOldVal = "YES"; }
+                                                            else if (displayOldVal == "1") { displayOldVal = "NO"; }
+                                                        }
+                                                        else if (fieldName.Equals("GFCLTYPE", StringComparison.OrdinalIgnoreCase))
+                                                        {
+                                                            if (displayOldVal == "1") { displayOldVal = "FCL"; }
+                                                            else if (displayOldVal == "0") { displayOldVal = "LCL"; }
+                                                        }
+                                                    }
+                                                    @if (oldIsEmpty)
+                                                    {
+                                                        <span class="old-badge" style="color: #999; font-style: italic;">(empty)</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="old-badge">@Html.Raw(HttpUtility.HtmlEncode(displayOldVal))</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @{
+                                                        // Convert numeric values to friendly text for specific fields
+                                                        var displayNewVal = newVal;
+                                                        // CRITICAL: Always convert GPETYPE values - this is SSR/Escort
+                                                        if (fieldName.Equals("GPETYPE", StringComparison.OrdinalIgnoreCase) || isGPETYPE)
+                                                        {
+                                                            if (displayNewVal == "1") { displayNewVal = "YES"; }
+                                                            else if (displayNewVal == "0") { displayNewVal = "NO"; }
+                                                            // Also handle if already converted to YES/NO
+                                                        }
+                                                        else if (fieldName.Equals("GPSTYPE", StringComparison.OrdinalIgnoreCase) || 
+                                                                 fieldName.Equals("GPWTYPE", StringComparison.OrdinalIgnoreCase))
+                                                        {
+                                                            if (displayNewVal == "1") { displayNewVal = "YES"; }
+                                                            else if (displayNewVal == "0") { displayNewVal = "NO"; }
+                                                        }
+                                                        else if (fieldName.Equals("GRADEID", StringComparison.OrdinalIgnoreCase))
+                                                        {
+                                                            if (displayNewVal == "2") { displayNewVal = "YES"; }
+                                                            else if (displayNewVal == "1") { displayNewVal = "NO"; }
+                                                        }
+                                                        else if (fieldName.Equals("GFCLTYPE", StringComparison.OrdinalIgnoreCase))
+                                                        {
+                                                            if (displayNewVal == "1") { displayNewVal = "FCL"; }
+                                                            else if (displayNewVal == "0") { displayNewVal = "LCL"; }
+                                                        }
+                                                    }
+                                                    @if (newIsEmpty)
+                                                    {
+                                                        <span class="new-badge" style="color: #999; font-style: italic;">(empty)</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="new-badge">@Html.Raw(HttpUtility.HtmlEncode(displayNewVal))</span>
+                                                    }
+                                                </td>
+                                                <td class="nowrap">@row.ChangedBy</td>
+                                                <td class="nowrap">@row.Modules</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-info">
+                                <i class="fa fa-info-circle"></i> No edit log entries found. Changes will appear here once records are modified.
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="alert alert-info">
+                            <i class="fa fa-info-circle"></i> No edit log entries found. Changes will appear here once records are modified.
+                        </div>
+                    }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section scripts{
+    <script src="~/Scripts/datatables/jquery.dataTables.js"></script>
+    <script src="~/Scripts/datatables/dataTables.bootstrap.js"></script>
+    <script>
+        $(function () {
+            // Set dynamic label for Vehicle Ticket, Truck Out, and Invoice
+            var numberLabel = '@(module == "ImportVehicleTicket" ? "Vehicle Ticket Number" : module == "ImportTruckOut" ? "Truck Out Number" : module == "ImportInvoice" ? "Invoice Number" : module == "ImportManualBill" ? "Manual Bill Number" : module == "ExportManualBill" ? "Export Manual Bill Number" : module == "DeliveryOrder" ? "Delivery Order Number" : module == "Stuffing" ? "Stuffing Number" : module == "StuffingBill" ? "Stuffing Bill Number" : "GateIn Number")';
+            
+            // No server-side toolbar filters
+            var table = $('#logTable').DataTable({
+                order: [[2, 'desc'], [3, 'desc'], [1, 'desc']],
+                pageLength: 50,
+                lengthMenu: [10, 25, 50, 100, 250],
+                stateSave: true,
+                autoWidth: false,
+                columns: [
+                    { orderable: false, searchable: false }, // details-control
+                    { type: 'string' }, // Changed On
+                    { type: 'num' },    // GIDNO
+                    { type: 'string' }, // Version
+                    { type: 'string' }, // Field
+                    { type: 'html' },   // Old
+                    { type: 'html' },   // New
+                    { type: 'string' }, // User
+                    { type: 'string' }  // Module
+                ],
+                drawCallback: function (settings) {
+                    // Group rows by GIDNO + Version for better readability
+                    var api = this.api();
+                    var rows = api.rows({ page: 'current' }).nodes();
+                    var last = null;
+                    api.column(2, { page: 'current' }).data().each(function (gid, i) {
+                        var ver = api.cell(rows[i], 3).data();
+                        var grp = gid + ' | ' + ver;
+                        if (last !== grp) {
+                            $(rows).eq(i).before(
+                                '<tr class="group-header"><td colspan="8">' +
+                                '<i class="fa fa-folder-open"></i> <strong>' + numberLabel + ':</strong> ' + gid +
+                                ' &nbsp; <strong>Version:</strong> ' + ver +
+                                '</td></tr>'
+                            );
+                            last = grp;
+                        }
+                    });
+                }
+            });
+
+            // Apply per-column filters (second header row)
+            $('#logTable thead tr:eq(1) th').each(function (i) {
+                var input = $('input', this);
+                if (input.length) {
+                    $(input).on('keyup change', function () {
+                        if (table.column(i).search() !== this.value) {
+                            table.column(i).search(this.value).draw();
+                        }
+                    });
+                }
+            });
+
+            // Column visibility toggles (data-col reflects column index)
+            $('.col-toggle').on('change', function () {
+                var col = table.column(parseInt($(this).data('col'), 10));
+                col.visible(this.checked);
+            });
+
+            // Removed date range filter and toolbar-related handlers
+
+            // Expand/collapse details rows
+            function formatDetails(tr) {
+                var row = table.row(tr).data();
+                // row indexes: [0]=control, [1]=ChangedOn, [2]=GIDID, [3]=Version, [4]=Field, [5]=Old, [6]=New, [7]=User, [8]=Module
+                var module = '@module';
+                var editUrl = '';
+                if (module === 'ImportInvoice') {
+                    editUrl = '@Url.Action("GSTForm", "ImportInvoice")' + '/' + row[2];
+                } else if (module === 'ImportManualBill') {
+                    editUrl = '@Url.Action("MGSTForm", "ImportManualBill")' + '/' + row[2];
+                } else if (module === 'ExportManualBill') {
+                    editUrl = '@Url.Action("GSTForm", "ExportManualBill")' + '/' + row[2];
+                } else if (module === 'DeliveryOrder') {
+                    editUrl = '@Url.Action("Form", "DeliveryOrder")' + '/' + row[2];
+                } else if (module === 'Stuffing') {
+                    editUrl = '@Url.Action("NForm", "Stuffing")' + '/' + row[2];
+                } else if (module === 'StuffingBill') {
+                    editUrl = '@Url.Action("GSTForm", "StuffingBill")' + '/' + row[2];
+                } else {
+                    editUrl = '@Url.Action("Edit","ImportGateIn")' + '/' + row[2];
+                }
+                var html = '' +
+                    '<div class="well" style="margin:5px 0;">' +
+                    '<div><strong>GIDID:</strong> ' + row[2] + ' &nbsp; <strong>Version:</strong> ' + row[3] + '</div>' +
+                    '<div><strong>Field:</strong> ' + $('<div/>').text($(row[4]).text ? $(row[4]).text() : row[4]).html() + '</div>' +
+                    '<div><strong>Old → New:</strong> ' + row[5] + ' &nbsp; <i class="fa fa-angle-right"></i> &nbsp; ' + row[6] + '</div>' +
+                    '<div><strong>Changed On / By:</strong> ' + row[1] + ' &nbsp; <span class="muted">(' + row[7] + ')</span></div>' +
+                    '<div><strong>Module:</strong> ' + row[8] + '</div>' +
+                    '<div style="margin-top:6px;">' +
+                        '<a class="btn btn-xs btn-info" target="_blank" href="' + editUrl + '"><i class="fa fa-external-link"></i> Open Record</a>' +
+                    '</div>' +
+                    '</div>';
+                return html;
+            }
+            $('#logTable tbody').on('click', 'td.details-control', function () {
+                var tr = $(this).closest('tr');
+                var row = table.row(tr);
+                if (row.child.isShown()) {
+                    row.child.hide();
+                    tr.removeClass('shown');
+                    $(this).find('.toggle').text('+');
+                } else {
+                    row.child(formatDetails(tr)).show();
+                    tr.addClass('shown');
+                    $(this).find('.toggle').text('−');
+                }
+            });
+
+            // Helper to format date to ISO yyyy-MM-dd for server query (older browser safe)
+            function toIsoDate(val) {
+                if (!val) return '';
+                var d = new Date(val);
+                if (isNaN(d.getTime())) return val; // send as-is
+                var m = (d.getMonth() + 1);
+                var day = d.getDate();
+                var mm = (m < 10 ? '0' + m : '' + m);
+                var dd = (day < 10 ? '0' + day : '' + day);
+                return d.getFullYear() + '-' + mm + '-' + dd;
+            }
+
+            // Removed server-side filter and export handlers
+
+            // Version compare button: if inside a form, allow normal submit (no JS).
+            // If not inside a form context, fallback to JS navigation for backward compat.
+            $('#goCompare').on('click', function (e) {
+                var $form = $(this).closest('form');
+                if ($form.length) {
+                    // Let the form submit normally to send gidid/versionA/versionB
+                    return; // do not preventDefault
+                }
+                e.preventDefault();
+                var gid = $('#cmpGidCompare').val() || $('#cmpGid').val();
+                var a = $('#cmpA').val();
+                var b = $('#cmpB').val();
+                if (!gid || !a || !b) {
+                    alert('Please enter GIDID, Version A and Version B to compare.');
+                    return;
+                }
+                var url = '@Url.Action(module == "ImportInvoice" ? "EditLogInvoiceCompare" : module == "ExportManualBill" ? "EditLogExportManualBillCompare" : module == "StuffingBill" ? "EditLogStuffingBillCompare" : "EditLogGateInCompare", module == "ImportInvoice" ? "ImportInvoice" : module == "ExportManualBill" ? "ExportManualBill" : module == "StuffingBill" ? "StuffingBill" : "ImportGateIn")' +
+                    '?' + $.param({ @(module == "ImportInvoice" || module == "ExportManualBill" || module == "StuffingBill" ? "tranmid" : "gidid"): gid, versionA: a, versionB: b });
+                window.location.href = url;
+            });
+        });
+    </script>
+}
+

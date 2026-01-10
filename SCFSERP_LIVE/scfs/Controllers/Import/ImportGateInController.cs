@@ -1,0 +1,2519 @@
+﻿
+using scfs.Data;
+using scfs_erp.Context;
+using scfs_erp.Helper;
+using scfs_erp.Models;
+using System;
+using System.Collections.Generic;
+using CrystalDecisions.CrystalReports.Engine;
+using CrystalDecisions.Shared;
+using System.Configuration;
+using System.Data.SqlClient;
+using System.Linq;
+using System.Net;
+using System.Web;
+using System.Web.Mvc;
+using System.Data.Entity;
+using System.Reflection;
+
+namespace scfs_erp.Controllers.Import
+{
+    public class ImportGateInController : Controller
+    {
+        // GET: ImportGateIn
+        #region Context declaration
+        SCFSERPContext context = new SCFSERPContext();
+
+        #endregion
+
+        #region Index Form
+        [Authorize(Roles = "ImportGateInIndex")]
+        public ActionResult Index()
+        {
+            if (Convert.ToInt32(Session["compyid"]) == 0) { return RedirectToAction("Login", "Account"); }
+
+
+
+            if (string.IsNullOrEmpty(Session["SDATE"] as string))
+            {
+
+                Session["SDATE"] = DateTime.Now.ToString("dd-MM-yyyy");
+                Session["EDATE"] = DateTime.Now.ToString("dd-MM-yyyy");
+            }
+            else
+            {
+                if (Request.Form.Get("from") != null)
+                {
+                    Session["SDATE"] = Request.Form.Get("from");
+                    Session["EDATE"] = Request.Form.Get("to");
+                }
+
+            }
+            DateTime sd = Convert.ToDateTime(Session["SDATE"]).Date;
+            DateTime ed = Convert.ToDateTime(Session["EDATE"]).Date;
+
+            DateTime fromdate = Convert.ToDateTime(Session["SDATE"]).Date;
+            DateTime todate = Convert.ToDateTime(Session["EDATE"]).Date;
+
+
+            TotalContainerDetails(fromdate, todate);
+
+
+            return View(context.gateindetails.Where(x => x.GIDATE >= sd).Where(x => x.GIDATE <= ed).Where(x => x.SDPTID == 1).Where(x => x.CONTNRID >= 1).ToList());
+        }
+        #endregion
+
+        #region Get data from database
+
+        public JsonResult GetAjaxData(JQueryDataTableParamModel param)
+        {
+
+            using (var e = new CFSImportEntities())
+            {
+                var totalRowsCount = new System.Data.Entity.Core.Objects.ObjectParameter("TotalRowsCount", typeof(int));
+                var filteredRowsCount = new System.Data.Entity.Core.Objects.ObjectParameter("FilteredRowsCount", typeof(int));
+
+                var data = e.pr_Search_Import_GateInGridAssgn(param.sSearch,
+                                                Convert.ToInt32(Request["iSortCol_0"]),
+                                                Request["sSortDir_0"],
+                                                param.iDisplayStart,
+                                                param.iDisplayStart + param.iDisplayLength,
+                                                totalRowsCount,
+                                                filteredRowsCount, Convert.ToDateTime(Session["SDATE"]),
+                                                Convert.ToDateTime(Session["EDATE"]),
+                                                Convert.ToInt32(System.Web.HttpContext.Current.Session["compyid"]));
+                var aaData = data.Select(d => new string[] { d.GIDATE.Value.ToString("dd/MM/yyyy"), d.GIDNO,
+                    d.CONTNRNO, d.CONTNRSID, d.IGMNO, d.GPLNO, d.IMPRTNAME, d.STMRNAME,  d.VSLNAME, d.BLNO,
+                    d.PRDTDESC, d.DISPSTATUS, d.GIDID.ToString() }).ToList();
+
+                return Json(new
+                {
+                    sEcho = param.sEcho,
+                    aaData = aaData,
+                    iTotalRecords = Convert.ToInt32(totalRowsCount.Value),
+                    iTotalDisplayRecords = Convert.ToInt32(filteredRowsCount.Value)
+                }, JsonRequestBehavior.AllowGet);
+
+            }
+        }
+        #endregion
+
+        #region TotalContainerDetails
+        public JsonResult TotalContainerDetails(DateTime fromdate, DateTime todate)
+        {
+            string fdate = ""; string tdate = ""; int sdptid = 1;
+            if (fromdate == null)
+            {
+                fromdate = DateTime.Now.Date;
+                fdate = Convert.ToString(fromdate);
+            }
+            else
+            {
+                string infdate = Convert.ToString(fromdate);
+                var in_date = infdate.Split(' ');
+                var in_date1 = in_date[0].Split('/');
+                fdate = Convert.ToString(in_date1[2] + "-" + in_date1[1] + "-" + in_date1[0]);
+            }
+            if (todate == null)
+            {
+                todate = DateTime.Now.Date;
+                tdate = Convert.ToString(todate);
+            }
+            else
+            {
+                string intdate = Convert.ToString(todate);
+
+                var in_date1 = intdate.Split(' ');
+                var in_date2 = in_date1[0].Split('/');
+                tdate = Convert.ToString(in_date2[2] + "-" + in_date2[1] + "-" + in_date2[0]);
+
+            }
+
+            context.Database.CommandTimeout = 0;
+            var result = context.Database.SqlQuery<PR_IMPORT_DASHBOARD_DETAILS_Result>("EXEC PR_IMPORT_DASHBOARD_DETAILS @PFDT='" + fdate + "',@PTDT='" + tdate + "',@PSDPTID=" + 1).ToList();
+
+            foreach (var rslt in result)
+            {
+                if ((rslt.Sno == 1) && (rslt.Descriptn == "IMPORT - GATEIN"))
+                {
+                    @ViewBag.Total20 = rslt.c_20;
+                    @ViewBag.Total40 = rslt.c_40;
+                    @ViewBag.Total45 = rslt.c_45;
+                    @ViewBag.TotalTues = rslt.c_tues;
+
+                    Session["GI20"] = rslt.c_20;
+                    Session["GI40"] = rslt.c_40;
+                    Session["GI45"] = rslt.c_45;
+                    Session["GITU"] = rslt.c_tues;
+                }
+
+            }
+
+            return Json(result, JsonRequestBehavior.AllowGet);
+
+        }
+        #endregion
+
+        #region Redirect to form from index
+        [Authorize(Roles = "ImportGateInEdit")]
+        public void Edit(string id)
+        {
+            var strPath = ConfigurationManager.AppSettings["BaseURL"];
+
+            Response.Redirect("" + strPath + "/ImportGateIn/Form/" + id);
+
+            //Response.Redirect("/ImportGateIn/Form/" + id);
+        }
+        #endregion
+
+        #region Creating or Modify Form
+        [Authorize(Roles = "ImportGateInCreate")]
+        public ActionResult Form(string id = "0")
+        {
+            if (Convert.ToInt32(Session["compyid"]) == 0) { return RedirectToAction("Login", "Account"); }
+            RemoteGateIn remotegatein = new RemoteGateIn();
+            GateInDetail tab = new GateInDetail();
+
+            string ginty = "";
+
+            var GID = 0; var RGId = 0;
+            if (id.Contains(';'))
+            {
+                var param = id.Split(';');
+                RGId = Convert.ToInt32(param[0]);
+                GID = Convert.ToInt32(param[1]);
+                ginty = "RGateIn";
+                Session["GTY"] = ginty;
+            }
+            else { GID = Convert.ToInt32(id); RGId = 0; ginty = "GateIn"; Session["GTY"] = ginty; }
+
+            // Read LDB API data from Session
+            string ldbDataJson = Session["LDBData"] as string;
+            if (!string.IsNullOrEmpty(ldbDataJson))
+            {
+                ViewBag.LdbData = ldbDataJson;
+                // Clear the session after reading to avoid showing stale data on page refresh
+                Session["LDBData"] = null;
+            }
+            else
+            {
+                ViewBag.LdbData = null;
+            }
+
+            //tab.GITIME = DateTime.Now;
+            //tab.GICCTLTIME = DateTime.Now;
+            //tab.IGMDATE = DateTime.Now.Date;
+
+            tab.GIDATE = DateTime.Now.Date;
+            tab.GITIME = DateTime.Now;
+            tab.GITIME = new DateTime(tab.GIDATE.Year, tab.GIDATE.Month, tab.GIDATE.Day, tab.GITIME.Hour, tab.GITIME.Minute, tab.GITIME.Second);
+
+            if (RGId > 0)
+            {
+                remotegatein = context.remotegateindetails.Find(RGId);
+                tab.RGIDID = RGId;
+                //tab.RGIDID = remotegatein.GIDID;
+                tab.VSLNAME = remotegatein.VSLNAME;
+                tab.VSLID = remotegatein.VSLID;
+                tab.GINO = remotegatein.GINO;
+                tab.GIDNO = remotegatein.GIDNO;
+                tab.GICCTLDATE = Convert.ToDateTime(remotegatein.GICCTLDATE).Date;
+                tab.GICCTLTIME = Convert.ToDateTime(remotegatein.GICCTLTIME);
+                //tab.GITIME = remotegatein.GITIME;
+                tab.VOYNO = remotegatein.VOYNO;
+                tab.GPLNO = remotegatein.GPLNO;
+                tab.IGMNO = remotegatein.IGMNO;
+                tab.IMPRTNAME = remotegatein.IMPRTNAME;
+                tab.IMPRTID = remotegatein.IMPRTID;
+                tab.STMRNAME = remotegatein.STMRNAME;
+                tab.STMRID = remotegatein.STMRID;
+                tab.CONTNRNO = remotegatein.CONTNRNO;
+                tab.CONTNRSID = remotegatein.CONTNRSID;
+                tab.CONTNRTID = remotegatein.CONTNRTID;
+                tab.PRDTDESC = remotegatein.PRDTDESC;
+                tab.PRDTGID = remotegatein.PRDTGID;
+                tab.GPWGHT = remotegatein.GPWGHT;//-----------
+                tab.GPEAMT = remotegatein.GPEAMT;
+                tab.GPAAMT = remotegatein.GPAAMT;
+                tab.IGMDATE = remotegatein.IGMDATE;
+                tab.BLNO = remotegatein.BLNO;
+                tab.GIISOCODE = remotegatein.GIISOCODE;
+
+                //ViewBag.ROWID = new SelectList(context.rowmasters.Where(x => x.DISPSTATUS == 0), "ROWID", "ROWDESC");
+                ViewBag.ROWID = new SelectList(context.rowmasters.Where(x => x.DISPSTATUS == 0), "ROWID", "ROWDESC", 6);
+                //ViewBag.SLOTID = new SelectList(context.slotmasters.Where(x => x.DISPSTATUS == 0), "SLOTID", "SLOTDESC");
+                ViewBag.SLOTID = new SelectList(context.slotmasters.Where(x => x.DISPSTATUS == 0), "SLOTID", "SLOTDESC", 6);
+                ViewBag.PRDTGID = new SelectList(context.productgroupmasters.Where(x => x.DISPSTATUS == 0).OrderBy(x => x.PRDTGDESC), "PRDTGID", "PRDTGDESC", remotegatein.PRDTGID);
+                ViewBag.CONTNRTID = new SelectList(context.containertypemasters.Where(x => x.DISPSTATUS == 0).OrderBy(x => x.CONTNRTDESC), "CONTNRTID", "CONTNRTDESC", remotegatein.CONTNRTID);
+                ViewBag.CONTNRSID = new SelectList(context.containersizemasters.Where(m => m.CONTNRSID > 1).Where(x => x.DISPSTATUS == 0), "CONTNRSID", "CONTNRSDESC", remotegatein.CONTNRSID);
+                ViewBag.GPPTYPE = new SelectList(context.porttypemaster, "GPPTYPE", "GPPTYPEDESC", remotegatein.GPPTYPE);
+                ViewBag.GPMODEID = new SelectList(context.gpmodemasters.Where(x => x.DISPSTATUS == 0 && x.GPMODEID != 5 && x.GPMODEID != 4).OrderBy(x => x.GPMODEDESC), "GPMODEID", "GPMODEDESC", remotegatein.GPMODEID);
+            }
+            else
+            {
+                tab.GIDATE = DateTime.Now.Date;
+                tab.GITIME = DateTime.Now;
+                tab.GITIME = new DateTime(tab.GIDATE.Year, tab.GIDATE.Month, tab.GIDATE.Day, tab.GITIME.Hour, tab.GITIME.Minute, tab.GITIME.Second);
+                tab.GICCTLDATE = DateTime.Now.Date;
+                tab.GICCTLTIME = DateTime.Now;
+
+                //-------------------Dropdown List--------------------------------------------------//
+                //ViewBag.ROWID = new SelectList(context.rowmasters.Where(x => x.DISPSTATUS == 0), "ROWID", "ROWDESC");
+                ViewBag.ROWID = new SelectList(context.rowmasters.Where(x => x.DISPSTATUS == 0), "ROWID", "ROWDESC", 6);
+                //ViewBag.SLOTID = new SelectList(context.slotmasters.Where(x => x.DISPSTATUS == 0), "SLOTID", "SLOTDESC");
+                ViewBag.SLOTID = new SelectList(context.slotmasters.Where(x => x.DISPSTATUS == 0), "SLOTID", "SLOTDESC", 6);
+                ViewBag.PRDTGID = new SelectList(context.productgroupmasters.Where(x => x.DISPSTATUS == 0).OrderBy(x => x.PRDTGDESC), "PRDTGID", "PRDTGDESC");
+                ViewBag.GPPTYPE = new SelectList(context.porttypemaster, "GPPTYPE", "GPPTYPEDESC", tab.GPPTYPE);
+                ViewBag.CONTNRTID = new SelectList(context.containertypemasters.Where(x => x.DISPSTATUS == 0).OrderBy(x => x.CONTNRTDESC), "CONTNRTID", "CONTNRTDESC");
+                ViewBag.CONTNRSID = new SelectList(context.containersizemasters.Where(x => x.DISPSTATUS == 0 && x.CONTNRSID > 1), "CONTNRSID", "CONTNRSDESC");
+                ViewBag.GPMODEID = new SelectList(context.gpmodemasters.Where(x => x.DISPSTATUS == 0 && x.GPMODEID != 5 && x.GPMODEID != 4).OrderBy(x => x.GPMODEDESC), "GPMODEID", "GPMODEDESC", 2);
+            }
+
+            //---------------------port--------------------------------------------------//   
+            //------------------Escord---------------//
+
+            List<SelectListItem> selectedGPETYPE = new List<SelectListItem>();
+            SelectListItem selectedItem = new SelectListItem { Text = "NO", Value = "0", Selected = false };
+            selectedGPETYPE.Add(selectedItem);
+            selectedItem = new SelectListItem
+            {
+                Text = "YES",
+                Value = "1",
+                Selected = false
+            };
+            selectedGPETYPE.Add(selectedItem);
+            ViewBag.GPETYPE = selectedGPETYPE;
+            // ------------------S.Amend-----------//
+
+            List<SelectListItem> selectedGPSTYPE = new List<SelectListItem>();
+            SelectListItem selectedItemst = new SelectListItem { Text = "NO", Value = "0", Selected = false };
+            selectedGPSTYPE.Add(selectedItemst);
+            selectedItemst = new SelectListItem { Text = "YES", Value = "1", Selected = false };
+            selectedGPSTYPE.Add(selectedItemst);
+            ViewBag.GPSTYPE = selectedGPSTYPE;
+
+            //  ------------------Weightment--------------//
+            List<SelectListItem> selectedGPWTYPE = new List<SelectListItem>();
+            SelectListItem selectedItemsts = new SelectListItem { Text = "NO", Value = "0", Selected = false };
+            selectedGPWTYPE.Add(selectedItemsts);
+            selectedItemsts = new SelectListItem { Text = "YES", Value = "1", Selected = true };
+            selectedGPWTYPE.Add(selectedItemsts);
+            ViewBag.GPWTYPE = selectedGPWTYPE;
+            //---------------scanned----------------------------
+            List<SelectListItem> selectedGPSCNTYPE = new List<SelectListItem>();
+            SelectListItem selectedItemsts1 = new SelectListItem { Text = "NO", Value = "0", Selected = true };
+            selectedGPSCNTYPE.Add(selectedItemsts1);
+            selectedItemsts1 = new SelectListItem { Text = "YES", Value = "1", Selected = false };
+            selectedGPSCNTYPE.Add(selectedItemsts1);
+            ViewBag.GPSCNTYPE = selectedGPSCNTYPE;
+
+            List<SelectListItem> selectedGPSCNMTYPE = new List<SelectListItem>();
+            SelectListItem selectedItemMtype1 = new SelectListItem { Text = "MISMATCH", Value = "1", Selected = false };
+            selectedGPSCNMTYPE.Add(selectedItemMtype1);
+            selectedItemMtype1 = new SelectListItem { Text = "CLEAN", Value = "2", Selected = false };
+            selectedGPSCNMTYPE.Add(selectedItemMtype1);
+            selectedItemMtype1 = new SelectListItem { Text = "NOT SCANNED", Value = "3", Selected = false };
+            selectedGPSCNMTYPE.Add(selectedItemMtype1);
+            ViewBag.GPSCNMTYPE = selectedGPSCNMTYPE;
+
+            //---------------
+            // -----------------------FCL------------------//
+
+            List<SelectListItem> selectedGFCLTYPE = new List<SelectListItem>();
+            SelectListItem selectedItemstf = new SelectListItem { Text = "LCL", Value = "0", Selected = false };
+            selectedGFCLTYPE.Add(selectedItemstf);
+            selectedItemstf = new SelectListItem { Text = "FCL", Value = "1", Selected = true };
+            selectedGFCLTYPE.Add(selectedItemstf);
+            ViewBag.GFCLTYPE = selectedGFCLTYPE;
+
+            // ------------------Reefer Container Plug in-----------//
+            List<SelectListItem> selectedGPRefer_List = new List<SelectListItem>();
+            SelectListItem selectedGPRefer = new SelectListItem { Text = "NO", Value = "1", Selected = false };
+            selectedGPRefer_List.Add(selectedGPRefer);
+            selectedGPRefer = new SelectListItem { Text = "YES", Value = "2", Selected = false };
+            selectedGPRefer_List.Add(selectedGPRefer);
+            ViewBag.GRADEID = selectedGPRefer_List;
+
+            //----------------------------------End----------------------------------------
+
+            if (GID != 0)//--Edit Mode
+            {
+                tab = context.gateindetails.Find(GID);
+
+                ginty = "GateIn"; Session["GTY"] = ginty;
+
+                //----------------------selected values in dropdown list------------------------------------//
+                ViewBag.SLOTID = new SelectList(context.slotmasters.Where(x => x.DISPSTATUS == 0), "SLOTID", "SLOTDESC", tab.SLOTID);
+                ViewBag.ROWID = new SelectList(context.rowmasters.Where(x => x.DISPSTATUS == 0), "ROWID", "ROWDESC", tab.ROWID);
+                ViewBag.GPPTYPE = new SelectList(context.porttypemaster, "GPPTYPE", "GPPTYPEDESC", tab.GPPTYPE);
+                ViewBag.PRDTGID = new SelectList(context.productgroupmasters.Where(x => x.DISPSTATUS == 0).OrderBy(x => x.PRDTGDESC), "PRDTGID", "PRDTGDESC", tab.PRDTGID);
+                ViewBag.CONTNRTID = new SelectList(context.containertypemasters.Where(x => x.DISPSTATUS == 0).OrderBy(x => x.CONTNRTDESC), "CONTNRTID", "CONTNRTDESC", tab.CONTNRTID);
+                ViewBag.CONTNRSID = new SelectList(context.containersizemasters.Where(x => x.DISPSTATUS == 0 && x.CONTNRSID > 1), "CONTNRSID", "CONTNRSDESC", tab.CONTNRSID);
+                ViewBag.GPMODEID = new SelectList(context.gpmodemasters.Where(x => x.DISPSTATUS == 0 && x.GPMODEID != 5 && x.GPMODEID != 4).OrderBy(x => x.GPMODEDESC), "GPMODEID", "GPMODEDESC", tab.GPMODEID);
+
+                //-------------------------------escord
+                List<SelectListItem> selectedGPETYPE1 = new List<SelectListItem>();
+                if (Convert.ToInt32(tab.GPETYPE) == 0)
+                {
+                    SelectListItem selectedItem1 = new SelectListItem { Text = "NO", Value = "0", Selected = true };
+                    selectedGPETYPE1.Add(selectedItem1);
+                    selectedItem1 = new SelectListItem { Text = "YES", Value = "1", Selected = false };
+                    selectedGPETYPE1.Add(selectedItem1);
+                }
+                else
+                {
+                    SelectListItem selectedItem1 = new SelectListItem { Text = "NO", Value = "0", Selected = false };
+                    selectedGPETYPE1.Add(selectedItem1);
+                    selectedItem1 = new SelectListItem { Text = "YES", Value = "1", Selected = true };
+                    selectedGPETYPE1.Add(selectedItem1);
+                }
+                ViewBag.GPETYPE = selectedGPETYPE1;
+
+                //------End---
+
+                //---------------scanned----------------------------
+                List<SelectListItem> selectedGPSCNTYPE1 = new List<SelectListItem>();
+                if (Convert.ToInt32(tab.GPSCNTYPE) == 0)
+                {
+                    SelectListItem selectedItemsts11 = new SelectListItem { Text = "NO", Value = "0", Selected = true };
+                    selectedGPSCNTYPE1.Add(selectedItemsts11);
+                    selectedItemsts11 = new SelectListItem { Text = "YES", Value = "1", Selected = false };
+                    selectedGPSCNTYPE1.Add(selectedItemsts11);
+
+                }
+                else
+                {
+                    SelectListItem selectedItemsts11 = new SelectListItem { Text = "NO", Value = "0", Selected = false };
+                    selectedGPSCNTYPE1.Add(selectedItemsts11);
+                    selectedItemsts11 = new SelectListItem { Text = "YES", Value = "1", Selected = true };
+                    selectedGPSCNTYPE1.Add(selectedItemsts11);
+                }
+                ViewBag.GPSCNTYPE = selectedGPSCNTYPE1;
+                //-----------End----------
+
+
+                List<SelectListItem> selectedGPSCNMTYPE2 = new List<SelectListItem>();
+                if (Convert.ToInt32(tab.GPSCNMTYPE) == 1)
+                {
+                    SelectListItem selectedItemsts14 = new SelectListItem { Text = "MISMATCH", Value = "1", Selected = true };
+                    selectedGPSCNMTYPE2.Add(selectedItemsts14);
+                    selectedItemsts14 = new SelectListItem { Text = "CLEAN", Value = "2", Selected = false };
+                    selectedGPSCNMTYPE2.Add(selectedItemsts14);
+                    selectedItemsts14 = new SelectListItem { Text = "NOT SCANNED", Value = "3", Selected = false };
+                    selectedGPSCNMTYPE2.Add(selectedItemsts14);
+
+                }
+                else if (Convert.ToInt32(tab.GPSCNMTYPE) == 2)
+                {
+                    SelectListItem selectedItemsts14 = new SelectListItem { Text = "MISMATCH", Value = "1", Selected = false };
+                    selectedGPSCNMTYPE2.Add(selectedItemsts14);
+                    selectedItemsts14 = new SelectListItem { Text = "CLEAN", Value = "2", Selected = true };
+                    selectedGPSCNMTYPE2.Add(selectedItemsts14);
+                    selectedItemsts14 = new SelectListItem { Text = "NOT SCANNED", Value = "3", Selected = false };
+                    selectedGPSCNMTYPE2.Add(selectedItemsts14);
+                }
+                else if (Convert.ToInt32(tab.GPSCNMTYPE) == 3)
+                {
+                    SelectListItem selectedItemsts14 = new SelectListItem { Text = "MISMATCH", Value = "1", Selected = false };
+                    selectedGPSCNMTYPE2.Add(selectedItemsts14);
+                    selectedItemsts14 = new SelectListItem { Text = "CLEAN", Value = "2", Selected = false };
+                    selectedGPSCNMTYPE2.Add(selectedItemsts14);
+                    selectedItemsts14 = new SelectListItem { Text = "NOT SCANNED", Value = "3", Selected = true };
+                    selectedGPSCNMTYPE2.Add(selectedItemsts14);
+                }
+                else 
+                {
+                    SelectListItem selectedItemsts14 = new SelectListItem { Text = "MISMATCH", Value = "1", Selected = false };
+                    selectedGPSCNMTYPE2.Add(selectedItemsts14);
+                    selectedItemsts14 = new SelectListItem { Text = "CLEAR", Value = "2", Selected = false };
+                    selectedGPSCNMTYPE2.Add(selectedItemsts14);
+                    selectedItemsts14 = new SelectListItem { Text = "NOT SCANNED", Value = "3", Selected = false };
+                    selectedGPSCNMTYPE2.Add(selectedItemsts14);
+                }
+                ViewBag.GPSCNMTYPE = selectedGPSCNMTYPE2;
+
+
+                // ------------------S.Amend-----------//
+                List<SelectListItem> selectedGPSTYPE1 = new List<SelectListItem>();
+                if (Convert.ToInt32(tab.GPSTYPE) == 0)
+                {
+                    SelectListItem selectedItemst1 = new SelectListItem { Text = "NO", Value = "0", Selected = true };
+                    selectedGPSTYPE1.Add(selectedItemst1);
+                    selectedItemst1 = new SelectListItem { Text = "YES", Value = "1", Selected = false };
+                    selectedGPSTYPE1.Add(selectedItemst1);
+                }
+                else
+                {
+                    SelectListItem selectedItemst1 = new SelectListItem { Text = "NO", Value = "0", Selected = false };
+                    selectedGPSTYPE1.Add(selectedItemst1);
+                    selectedItemst1 = new SelectListItem { Text = "YES", Value = "1", Selected = true };
+                    selectedGPSTYPE1.Add(selectedItemst1);
+                }
+                ViewBag.GPSTYPE = selectedGPSTYPE1;
+
+
+                //  ------------------Weightment--------------//
+                List<SelectListItem> selectedGPWTYPE2 = new List<SelectListItem>();
+                if (Convert.ToInt32(tab.GPWTYPE) == 0)
+                {
+                    SelectListItem selectedItemsts2 = new SelectListItem { Text = "NO", Value = "0", Selected = true };
+                    selectedGPWTYPE2.Add(selectedItemsts2);
+                    selectedItemsts2 = new SelectListItem { Text = "YES", Value = "1", Selected = false };
+                    selectedGPWTYPE2.Add(selectedItemsts2);
+                    ViewBag.GPWTYPE = selectedGPWTYPE2;
+                }
+                else
+                {
+                    SelectListItem selectedItemsts2 = new SelectListItem { Text = "NO", Value = "0", Selected = false };
+                    selectedGPWTYPE2.Add(selectedItemsts2);
+                    selectedItemsts2 = new SelectListItem { Text = "YES", Value = "1", Selected = true };
+                    selectedGPWTYPE2.Add(selectedItemsts2);
+                    ViewBag.GPWTYPE = selectedGPWTYPE2;
+                }
+                ViewBag.GPWTYPE = selectedGPWTYPE2;
+                // -----------------------FCL------------------//
+                List<SelectListItem> selectedGFCLTYPE3 = new List<SelectListItem>();
+                if (Convert.ToInt32(tab.GFCLTYPE) == 0)
+                {
+                    SelectListItem selectedItemstf3 = new SelectListItem { Text = "LCL", Value = "0", Selected = true };
+                    selectedGFCLTYPE3.Add(selectedItemstf3);
+                    selectedItemstf3 = new SelectListItem { Text = "FCL", Value = "1", Selected = false };
+                    selectedGFCLTYPE3.Add(selectedItemstf3);
+
+                }
+                else
+                {
+                    SelectListItem selectedItemstf3 = new SelectListItem { Text = "LCL", Value = "0", Selected = false };
+                    selectedGFCLTYPE3.Add(selectedItemstf3);
+                    selectedItemstf3 = new SelectListItem { Text = "FCL", Value = "1", Selected = true };
+                    selectedGFCLTYPE3.Add(selectedItemstf3);
+                }
+                ViewBag.GFCLTYPE = selectedGFCLTYPE3;
+
+
+                List<SelectListItem> selectedGPRefer_List1 = new List<SelectListItem>();
+                if (Convert.ToInt32(tab.GRADEID) == 1)
+                {
+                    SelectListItem selectedGPRefer1 = new SelectListItem { Text = "NO", Value = "1", Selected = true };
+                    selectedGPRefer_List1.Add(selectedGPRefer1);
+                    selectedGPRefer1 = new SelectListItem { Text = "YES", Value = "2", Selected = false };
+                    selectedGPRefer_List1.Add(selectedGPRefer1);
+                }
+                else if (Convert.ToInt32(tab.GRADEID) == 2)
+                {
+                    SelectListItem selectedGPRefer1 = new SelectListItem { Text = "NO", Value = "1", Selected = false };
+                    selectedGPRefer_List1.Add(selectedGPRefer1);
+                    selectedGPRefer1 = new SelectListItem { Text = "YES", Value = "2", Selected = true };
+                    selectedGPRefer_List1.Add(selectedGPRefer1);
+                }
+                else
+                {
+                    SelectListItem selectedGPRefer1 = new SelectListItem { Text = "NO", Value = "1", Selected = false };
+                    selectedGPRefer_List1.Add(selectedGPRefer1);
+                    selectedGPRefer1 = new SelectListItem { Text = "YES", Value = "2", Selected = false };
+                    selectedGPRefer_List1.Add(selectedGPRefer1);
+                }
+                ViewBag.GRADEID = selectedGPRefer_List1;
+
+            }
+
+
+            return View(tab);
+        }
+        #endregion
+
+        #region Save data
+        [HttpPost]
+        public void saveidata(GateInDetail tab)
+        {
+            var R_GIDID = Request.Form.Get("R_GIDID");
+
+            string todaydt = Convert.ToString(DateTime.Now);
+            string todayd = Convert.ToString(DateTime.Now.Date);
+
+            tab.PRCSDATE = DateTime.Now;
+            //tab.GIDATE = Convert.ToDateTime(tab.GIDATE).Date;// DateTime.Now.Date;
+            //tab.GITIME = Convert.ToDateTime(tab.GITIME);
+            //tab.GITIME = new DateTime(tab.GIDATE.Year, tab.GIDATE.Month, tab.GIDATE.Day, tab.GITIME.Hour, tab.GITIME.Minute, tab.GITIME.Second);
+            //tab.GICCTLTIME = Convert.ToDateTime(tab.GICCTLTIME);
+            //tab.GICCTLDATE = Convert.ToDateTime(tab.GICCTLDATE);
+            tab.CONTNRID = 1;
+            tab.YRDID = 1;
+            tab.COMPYID = Convert.ToInt32(Session["compyid"]);
+            tab.SDPTID = 1;
+            tab.AVHLNO = tab.VHLNO;
+            tab.ESBDATE = DateTime.Now;
+            tab.DISPSTATUS = tab.DISPSTATUS;
+            tab.EXPRTRID = 0;
+            tab.EXPRTRNAME = "-";
+            tab.BCHAID = 0;
+            tab.UNITID = 0;
+
+            string indate = Convert.ToString(tab.GIDATE);
+            if (indate != null || indate != "")
+            {
+                tab.GIDATE = Convert.ToDateTime(indate).Date;
+            }            
+            else { tab.GIDATE = DateTime.Now.Date; }
+
+            if (tab.GIDATE > Convert.ToDateTime(todayd))
+            {
+                tab.GIDATE = Convert.ToDateTime(todayd);
+            }
+
+            string intime = Convert.ToString(tab.GITIME);
+            if ((intime != null || intime != "") && ((indate != null || indate != "")))
+            {
+                if ((intime.Contains(' ')) && (indate.Contains(' ')))
+                {
+                    var in_time = intime.Split(' ');
+                    var in_date = indate.Split(' ');
+
+                    if ((in_time[1].Contains(':')) && (in_date[0].Contains('/')))
+                    {
+
+                        var in_time1 = in_time[1].Split(':');
+                        var in_date1 = in_date[0].Split('/');
+
+                        string in_datetime = in_date1[2] + "-" + in_date1[1] + "-" + in_date1[0] + "  " + in_time1[0] + ":" + in_time1[1] + ":" + in_time1[2];
+
+                        tab.GITIME = Convert.ToDateTime(in_datetime);
+                    }                    
+                    else { tab.GITIME = DateTime.Now; }
+                }
+                else
+                {
+                    var in_time = intime;
+                    var in_date = indate;
+
+                    if ((in_time.Contains(':')) && (in_date.Contains('/')))
+                    {
+                        var in_time1 = in_time.Split(':');
+                        var in_date1 = in_date.Split('/');
+
+                        string in_datetime = in_date1[2] + "-" + in_date1[1] + "-" + in_date1[0] + "  " + in_time1[0] + ":" + in_time1[1] + ":" + in_time1[2];
+
+                        tab.GITIME = Convert.ToDateTime(in_datetime);
+                    }
+                    else { tab.GITIME = DateTime.Now; }
+                }
+            }
+            else { tab.GITIME = DateTime.Now; }
+
+            if (tab.GITIME > Convert.ToDateTime(todaydt))
+            {
+                tab.GITIME = Convert.ToDateTime(todaydt);
+            }
+
+            // GATE IN CCT DATE AND TIME
+            string cctindate = Convert.ToString(tab.GICCTLDATE);
+            if (cctindate != null || cctindate != "")
+            {
+                tab.GICCTLDATE = Convert.ToDateTime(cctindate).Date;
+            }
+            else { tab.GICCTLDATE = DateTime.Now.Date; }
+
+            if (tab.GICCTLDATE > Convert.ToDateTime(todayd))
+            {
+                tab.GICCTLDATE = Convert.ToDateTime(todayd);
+            }
+
+            string cctintime = Convert.ToString(tab.GICCTLTIME);
+            if ((cctintime != null || cctintime != "") && ((cctindate != null || cctindate != "")))
+            {
+                if ((cctintime.Contains(' ')) && (cctindate.Contains(' ')))
+                {
+                    var CCin_time = cctintime.Split(' ');
+                    var CCTin_date = cctindate.Split(' ');
+
+                    if ((CCin_time[1].Contains(':')) && (CCTin_date[0].Contains('/')))
+                    {
+                        var CCTin_time1 = CCin_time[1].Split(':');
+                        var CCTin_date1 = CCTin_date[0].Split('/');
+
+                        string CCTin_datetime = CCTin_date1[2] + "-" + CCTin_date1[1] + "-" + CCTin_date1[0] + "  " + CCTin_time1[0] + ":" + CCTin_time1[1] + ":" + CCTin_time1[2];
+
+                        tab.GICCTLTIME = Convert.ToDateTime(CCTin_datetime);
+                    }
+                    else { tab.GICCTLTIME = DateTime.Now; }
+                }
+                else { tab.GICCTLTIME = DateTime.Now; }
+            }
+            else { tab.GICCTLTIME = DateTime.Now; }
+
+            if (tab.GICCTLTIME > Convert.ToDateTime(todaydt))
+            {
+                tab.GICCTLTIME = Convert.ToDateTime(todaydt);
+            }
+
+            if (tab.CUSRID == "" || tab.CUSRID == null)
+            {
+                if (Session["CUSRID"] != null)
+                {
+                    tab.CUSRID = Session["CUSRID"].ToString();
+                }
+                else { tab.CUSRID = ""; }
+            }
+
+            if (tab.GPSCNTYPE == 0)
+            {
+                tab.GPSCNMTYPE = 0;
+            }
+
+            tab.LMUSRID = Session["CUSRID"].ToString();
+            if (tab.GIDID.ToString() != "0")
+            {
+                // Capture before state for edit logging
+                GateInDetail before = null;
+                try
+                {
+                    before = context.gateindetails.AsNoTracking().FirstOrDefault(x => x.GIDID == tab.GIDID);
+                    if (before != null)
+                    {
+                        EnsureBaselineVersionZero(before, Session["CUSRID"]?.ToString() ?? "");
+                    }
+                }
+                catch { /* ignore if baseline creation fails */ }
+                
+                context.Entry(tab).Entity.NGIDID = tab.GIDID + 1;
+                context.Entry(tab).State = System.Data.Entity.EntityState.Modified;
+                context.SaveChanges();
+                
+                // Log changes after successful save
+                if (before != null)
+                {
+                    try
+                    {
+                        var after = context.gateindetails.AsNoTracking().FirstOrDefault(x => x.GIDID == tab.GIDID);
+                        if (after != null)
+                        {
+                            LogGateInEdits(before, after, Session["CUSRID"]?.ToString() ?? "");
+                        }
+                    }
+                    catch { /* ignore logging errors */ }
+                }
+                
+                Response.Write("saved");
+            }
+
+            else
+            {
+
+                string sqry = "SELECT *FROM GATEINDETAIL  WHERE VOYNO='" + tab.VOYNO + "' And IGMNO='" + tab.IGMNO + "' ";
+                sqry += " And GPLNO='" + tab.GPLNO + "' And CONTNRNO ='" + tab.CONTNRNO + "' And COMPYID=" + tab.COMPYID + " And SDPTID=1";
+                var sl = context.Database.SqlQuery<GateInDetail>(sqry).ToList();
+
+                if (sl.Count > 0)
+                {
+                    Response.Write("exists");
+                }
+                else
+                {
+
+                    //----------------first record------------------//              
+                    tab.CUSRID = Session["CUSRID"].ToString();
+                    tab.GINO = Convert.ToInt32(Autonumber.autonum("gateindetail", "GINO", "GINO <> 0 AND SDPTID = 1 and compyid = " + Convert.ToInt32(Session["compyid"]) + "").ToString());
+                    int ano = tab.GINO;
+                    string prfx = string.Format("{0:D5}", ano);
+                    tab.GIDNO = prfx.ToString();
+
+                    if (R_GIDID != null)
+                        tab.RGIDID = Convert.ToInt32(R_GIDID);
+
+                    context.gateindetails.Add(tab);
+                    context.SaveChanges();
+                    context.Entry(tab).Entity.NGIDID = tab.GIDID + 1;
+                    context.Entry(tab).State = System.Data.Entity.EntityState.Modified;
+                    context.SaveChanges();
+                    
+                    // Create baseline for new record
+                    try
+                    {
+                        EnsureBaselineVersionZero(tab, Session["CUSRID"]?.ToString() ?? "");
+                    }
+                    catch { /* ignore baseline creation errors */ }
+
+                    ///*/.....delete remote gate in*/
+                    if (R_GIDID != "0")
+                    {
+                        RemoteGateIn remotegatein = context.remotegateindetails.Find(Convert.ToInt32(R_GIDID));
+                        remotegatein.AGIDID = tab.GIDID;
+
+                        //context.remotegateindetails.Remove(remotegatein);
+                        context.SaveChanges();
+
+                    }/*end*/
+
+                    //-----second record-----------------------------// 
+                    tab.GITIME = tab.GITIME;
+                    tab.TRNSPRTNAME = tab.TRNSPRTNAME;
+                    tab.AVHLNO = tab.VHLNO;
+                    tab.DRVNAME = tab.DRVNAME;
+                    tab.GPREFNO = tab.GPREFNO;
+                    tab.IMPRTID = tab.IMPRTID;// 0;
+                    tab.IMPRTNAME = tab.IMPRTNAME;//  "-";
+                    tab.STMRID = tab.STMRID;// 0;
+                    tab.STMRNAME = tab.STMRNAME;// "-";
+                    tab.CONDTNID = 0;
+                    tab.CONTNRNO = "-";
+                    tab.CONTNRTID = 0;
+                    tab.CONTNRID = 0;
+                    tab.CONTNRSID = 0;
+                    tab.LPSEALNO = "-";
+                    tab.CSEALNO = "-";
+                    tab.YRDID = 0;
+                    tab.VSLID = 0;
+                    tab.VSLNAME = "-";
+                    tab.VOYNO = "-";
+                    tab.PRDTGID = 0;
+                    tab.PRDTDESC = "-";
+                    tab.UNITID = 0;
+                    tab.GPLNO = "-";
+                    tab.GPWGHT = 0;
+                    tab.GPEAMT = 0;
+                    tab.GPAAMT = 0;
+                    tab.IGMNO = tab.IGMNO;
+                    tab.GIISOCODE = tab.GIISOCODE;
+                    tab.GIDMGDESC = tab.GIDMGDESC;
+                    tab.GPWTYPE = 0;
+                    tab.GPSTYPE = 0;
+                    tab.RGIDID = 0;
+                    tab.GPETYPE = 0;
+                    tab.ROWID = 0;
+                    tab.SLOTID = 0;
+                    tab.DISPSTATUS = 0;
+                    tab.GIVHLTYPE = 0;
+                    tab.TRNSPRTID = 0;
+                    tab.NGIDID = 0;
+                    tab.BOEDID = tab.GIDID;
+                    tab.BLNO = tab.BLNO;
+                    tab.BOENO = tab.BOENO;
+                    tab.CFSNAME = tab.CFSNAME;
+
+
+                    var GINO = Request.Form.Get("GINO");
+
+                    //if (context.gateindetails.Where(u => u.GINO == Convert.ToInt32(GINO)).Count()!=0) 
+                    tab.GINO = Convert.ToInt32(Autonumber.autonum("gateindetail", "GINO", "GINO <> 0 AND SDPTID = 1 and compyid=" + Convert.ToInt32(Session["compyid"]) + "").ToString());
+                    //  else tab.GINO = 1;
+                    int anoo = tab.GINO;
+                    string prfxx = string.Format("{0:D5}", anoo);
+                    tab.GIDNO = prfxx.ToString();
+                    context.gateindetails.Add(tab);
+                    context.SaveChanges();
+                    
+                    // Create baseline for second new record
+                    try
+                    {
+                        EnsureBaselineVersionZero(tab, Session["CUSRID"]?.ToString() ?? "");
+                    }
+                    catch { /* ignore baseline creation errors */ }
+
+                }
+                Response.Write("saved");
+                //Response.Redirect("Index");
+            }
+        }
+
+        public void savedata(GateInDetail tab)
+        {
+            var R_GIDID = Request.Form.Get("R_GIDID");
+
+            string todaydt = Convert.ToString(DateTime.Now);
+            string todayd = Convert.ToString(DateTime.Now.Date);
+
+            tab.PRCSDATE = DateTime.Now;
+            tab.GIDATE = Convert.ToDateTime(tab.GIDATE).Date;
+            tab.GITIME = Convert.ToDateTime(tab.GITIME);
+            tab.GITIME = new DateTime(tab.GIDATE.Year, tab.GIDATE.Month, tab.GIDATE.Day, tab.GITIME.Hour, tab.GITIME.Minute, tab.GITIME.Second);
+            tab.GICCTLDATE = Convert.ToDateTime(tab.GICCTLTIME).Date;
+            tab.CONTNRID = 1;
+            tab.YRDID = 1;
+            tab.COMPYID = Convert.ToInt32(Session["compyid"]);
+            tab.SDPTID = 1;
+            tab.AVHLNO = tab.VHLNO;
+            tab.ESBDATE = DateTime.Now;
+            tab.DISPSTATUS = tab.DISPSTATUS;
+            tab.LMUSRID = Session["CUSRID"].ToString();
+
+            if (tab.GIDATE > Convert.ToDateTime(todayd))
+            {
+                tab.GIDATE = Convert.ToDateTime(todayd);
+            }
+
+            if (tab.GITIME > Convert.ToDateTime(todaydt))
+            {
+                tab.GITIME = Convert.ToDateTime(todaydt);
+            }
+
+            if (tab.GICCTLDATE > Convert.ToDateTime(todayd))
+            {
+                tab.GICCTLDATE = Convert.ToDateTime(todayd);
+            }
+
+            if (tab.GICCTLTIME > Convert.ToDateTime(todaydt))
+            {
+                tab.GICCTLTIME = Convert.ToDateTime(todaydt);
+            }
+
+            if (tab.CUSRID == "" || tab.CUSRID == null)
+            {
+                if (Session["CUSRID"] != null)
+                {
+                    tab.CUSRID = Session["CUSRID"].ToString();
+                }
+                else { tab.CUSRID = "0"; }
+            }
+            tab.BOEDATE = Convert.ToDateTime(tab.BOEDATE).Date;
+
+            if (tab.GIDID.ToString() != "0")
+            {
+                // Capture before state for edit logging
+                GateInDetail before = null;
+                try
+                {
+                    before = context.gateindetails.AsNoTracking().FirstOrDefault(x => x.GIDID == tab.GIDID);
+                    if (before != null)
+                    {
+                        EnsureBaselineVersionZero(before, Session["CUSRID"]?.ToString() ?? "");
+                    }
+                }
+                catch { /* ignore if baseline creation fails */ }
+
+                context.Entry(tab).Entity.NGIDID = tab.GIDID + 1;
+                context.Entry(tab).State = System.Data.Entity.EntityState.Modified;
+                context.SaveChanges();
+                
+                // Log changes after successful save
+                if (before != null)
+                {
+                    try
+                    {
+                        var after = context.gateindetails.AsNoTracking().FirstOrDefault(x => x.GIDID == tab.GIDID);
+                        if (after != null)
+                        {
+                            LogGateInEdits(before, after, Session["CUSRID"]?.ToString() ?? "");
+                        }
+                    }
+                    catch { /* ignore logging errors */ }
+                }
+            }
+
+            else
+            {
+
+                //----------------first record------------------//              
+
+                tab.GINO = Convert.ToInt32(Autonumber.autonum("gateindetail", "GINO", "GINO <> 0 AND SDPTID = 1 and compyid = " + Convert.ToInt32(Session["compyid"]) + "").ToString());
+                int ano = tab.GINO;
+                string prfx = string.Format("{0:D5}", ano);
+                tab.GIDNO = prfx.ToString();
+
+
+                if (R_GIDID != null)
+                    tab.RGIDID = Convert.ToInt32(R_GIDID);
+                //    tab.CUSRID = Session["CUSRID"].ToString();
+                //else tab.CUSRID = "0";
+                context.gateindetails.Add(tab);
+                context.SaveChanges();
+                
+                // Create baseline for new record
+                try
+                {
+                    EnsureBaselineVersionZero(tab, Session["CUSRID"]?.ToString() ?? "");
+                }
+                catch { /* ignore baseline creation errors */ }
+                
+                context.Entry(tab).Entity.NGIDID = tab.GIDID + 1;
+                context.Entry(tab).State = System.Data.Entity.EntityState.Modified;
+                context.SaveChanges();
+
+                ///*/.....delete remote gate in*/
+                if (R_GIDID != "0")
+                {
+                    RemoteGateIn remotegatein = context.remotegateindetails.Find(Convert.ToInt32(R_GIDID));
+                    remotegatein.GIDID = tab.GIDID;
+
+                    // context.remotegateindetails.Remove(remotegatein);
+                    context.SaveChanges();
+
+                }/*end*/
+
+                //-----second record-----------------------------// 
+                tab.GIDATE = Convert.ToDateTime(tab.GIDATE).Date;
+                tab.GITIME = Convert.ToDateTime(tab.GITIME);
+                tab.GITIME = new DateTime(tab.GIDATE.Year, tab.GIDATE.Month, tab.GIDATE.Day, tab.GITIME.Hour, tab.GITIME.Minute, tab.GITIME.Second);
+                tab.TRNSPRTNAME = tab.TRNSPRTNAME;
+                tab.AVHLNO = tab.VHLNO;
+                tab.DRVNAME = tab.DRVNAME;
+                tab.GPREFNO = tab.GPREFNO;
+                tab.IMPRTID = 0;
+                tab.IMPRTNAME = "-";
+                tab.STMRID = 0;
+                tab.STMRNAME = "-";
+                tab.CONDTNID = 0;
+                tab.CONTNRNO = "-";
+                tab.CONTNRTID = 0;
+                tab.CONTNRID = 0;
+                tab.CONTNRSID = 0;
+                tab.LPSEALNO = "-";
+                tab.CSEALNO = "-";
+                tab.YRDID = 0;
+                tab.VSLID = 0;
+                tab.VSLNAME = "-";
+                tab.VOYNO = "-";
+                tab.PRDTGID = 0;
+                tab.PRDTDESC = "-";
+                tab.UNITID = 0;
+                tab.GPLNO = "-";
+                tab.GPWGHT = 0;
+                tab.GPEAMT = 0;
+                tab.GPAAMT = 0;
+                tab.IGMNO = tab.IGMNO;
+                tab.GIISOCODE = tab.GIISOCODE;
+                tab.GIDMGDESC = tab.GIDMGDESC;
+                tab.GPWTYPE = 0;
+                tab.GPSTYPE = 0;
+                tab.GPETYPE = 0;
+                //tab.ROWID = 0;
+                tab.SLOTID = 0;
+                tab.DISPSTATUS = 0;
+                tab.GIVHLTYPE = 0;
+                tab.TRNSPRTID = 0;
+                tab.NGIDID = 0;
+                tab.BOEDID = tab.GIDID;
+                tab.BLNO = tab.BLNO;
+                tab.BOENO = tab.BOENO;
+                tab.CFSNAME = tab.CFSNAME;
+
+
+                var GINO = Request.Form.Get("GINO");
+
+                //if (context.gateindetails.Where(u => u.GINO == Convert.ToInt32(GINO)).Count()!=0) 
+                tab.GINO = Convert.ToInt32(Autonumber.autonum("gateindetail", "GINO", "GINO <> 0 AND SDPTID = 1 and compyid=" + Convert.ToInt32(Session["compyid"]) + "").ToString());
+                //  else tab.GINO = 1;
+                int anoo = tab.GINO;
+                string prfxx = string.Format("{0:D5}", anoo);
+                tab.GIDNO = prfxx.ToString();
+                context.gateindetails.Add(tab);
+                context.SaveChanges();
+                
+                // Create baseline for second new record
+                try
+                {
+                    EnsureBaselineVersionZero(tab, Session["CUSRID"]?.ToString() ?? "");
+                }
+                catch { /* ignore baseline creation errors */ }
+
+            }
+
+            Response.Redirect("Index");
+
+        }
+        #endregion
+
+        public void CONT_Duplicate_Check(string VOYNO, string GPLNO, string IGMNO, string CONTNRNO, string date)
+        {
+            VOYNO = Request.Form.Get("VOYNO");
+            GPLNO = Request.Form.Get("GPLNO");
+            IGMNO = Request.Form.Get("IGMNO");
+            CONTNRNO = Request.Form.Get("CONTNRNO");
+            date = Request.Form.Get("GIDATE");
+
+            string temp = ContainerNo_Check.recordCount(VOYNO, IGMNO, GPLNO, CONTNRNO);
+            if (temp != "PROCEED")
+            {
+                Response.Write("Container number already exists");
+            }
+            else
+            {
+                var query = context.Database.SqlQuery<PR_IMPORT_GATEIN_CONTAINER_CHK_ASSGN_Result>("Exec PR_IMPORT_GATEIN_CONTAINER_CHK_ASSGN @PCONTNRNO='" + CONTNRNO + "'").ToList();
+                if (query.Count > 0)
+                {
+                    DateTime gedate = Convert.ToDateTime(query[0].GEDATE);
+                    DateTime gidate = Convert.ToDateTime(date);
+                    var s = (gedate - gidate).Days;
+                    //   Response.Write(s);
+                    //if (s != 0)
+                    //{
+                    //    Response.Write("DATE INCORRECT");
+                    //}
+                    if (gidate >= gedate)
+                    {
+                        Response.Write("PROCEED");
+                    }
+                    else
+                    {
+                        Response.Write("DATE INCORRECT");
+                    }
+                    //if (s < 10)
+                    //{
+                    //    Response.Write("DATE INCORRECT");
+                    //}
+                }
+                else
+                {
+                    Response.Write("PROCEED");
+                }
+            }
+
+        }
+
+        #region Autocomplete Vehicle PNR On  Id  
+        public JsonResult AutoVehicleNo(string term)
+        {
+            string vno = ""; int Tid = 0;
+            var Param = term.Split(';');
+
+            if (Param[0] != "" || Param[0] != null) { vno = Convert.ToString(Param[0]); } else { vno = ""; }
+            if (Param[1] != "" || Param[1] != null) { Tid = Convert.ToInt32(Param[1]); } else { Tid = 0; }
+           
+           
+            var result = (from vehicle in context.vehiclemasters.Where(m => m.DISPSTATUS == 0 && m.TRNSPRTID == Tid)
+                          where vehicle.VHLMDESC.ToLower().Contains(vno.ToLower())
+                          select new { vehicle.VHLMDESC, vehicle.VHLMID }).Distinct();
+
+            return Json(result, JsonRequestBehavior.AllowGet);
+        }
+        #endregion
+
+        public void CheckAmt()
+        {
+            string vno = Request.Form.Get("vno");
+
+            string amt = Request.Form.Get("amt");
+
+            if (Convert.ToInt16(vno) == 1 && Convert.ToDecimal(amt) == 0)
+            {
+                Response.Write("Escord Amount is Required");
+
+            }
+            else
+            {
+
+            }
+
+        }
+
+        #region Auto Vessel
+        public JsonResult AutoVessel(string term)
+        {
+            var result = (from vessel in context.vesselmasters
+                          where vessel.VSLDESC.ToLower().Contains(term.ToLower())
+                          select new { vessel.VSLDESC, vessel.VSLID }).Distinct();
+            return Json(result, JsonRequestBehavior.AllowGet);
+        }
+        #endregion
+
+        #region Autocomplete transporter Name
+        public JsonResult AutoTransporter(string term)
+        {
+            var result = (from r in context.categorymasters.Where(x => x.CATETID == 5 && x.DISPSTATUS == 0)
+                          where r.CATENAME.ToLower().Contains(term.ToLower())
+                          select new { r.CATENAME, r.CATEID }).OrderBy(x => x.CATENAME).Distinct();
+            return Json(result, JsonRequestBehavior.AllowGet);
+        }
+        #endregion
+
+        #region Autocomplete Steamer Name
+        public JsonResult AutoSteamer(string term)
+        {
+            var result = (from category in context.categorymasters.Where(m => m.CATETID == 3).Where(x => x.DISPSTATUS == 0)
+                          where category.CATENAME.ToLower().Contains(term.ToLower())
+                          select new { category.CATENAME, category.CATEID }).Distinct();
+            return Json(result, JsonRequestBehavior.AllowGet);
+        }
+        #endregion
+
+        #region Autocomplete Importer Name
+        public JsonResult AutoImpoter(string term)
+        {
+            var result = (from r in context.categorymasters.Where(m => m.CATETID == 1).Where(x => x.DISPSTATUS == 0)
+                          where r.CATENAME.ToLower().Contains(term.ToLower())
+                          select new { r.CATENAME, r.CATEID }).Distinct();
+            return Json(result, JsonRequestBehavior.AllowGet);
+        }
+        #endregion
+
+        #region Autocomplete Cha Name
+        public JsonResult AutoChaName(string term)
+        {
+            var result = (from r in context.categorymasters.Where(m => m.CATETID == 4).Where(x => x.DISPSTATUS == 0)
+                          where r.CATENAME.ToLower().Contains(term.ToLower())
+                          select new { r.CATENAME, r.CATEID }).Distinct();
+            return Json(result, JsonRequestBehavior.AllowGet);
+        }
+        #endregion
+
+        #region Autocomplete slot Name
+        public JsonResult AutoSlot(string term)
+        {
+            var result = (from slot in context.slotmasters.Where(x => x.DISPSTATUS == 0)
+                          where slot.SLOTDESC.ToLower().Contains(term.ToLower())
+                          select new { slot.SLOTID, slot.SLOTDESC }).Distinct();
+            return Json(result, JsonRequestBehavior.AllowGet);
+        }
+
+        public JsonResult GetSlot(int id)
+        {
+            
+            var slot = (from a in context.slotmasters.Where(x => x.DISPSTATUS == 0 && x.ROWID == id) select a).ToList();
+            return Json(slot, JsonRequestBehavior.AllowGet);
+        }
+        #endregion
+
+        public JsonResult GetVehicle(int id)//vehicl
+        {
+            var query = (from a in context.vehiclemasters.Where(x => x.DISPSTATUS == 0) where a.TRNSPRTID == id select a).ToList();
+            return Json(query, JsonRequestBehavior.AllowGet);
+        }
+
+
+        //-------------Autocomplete Vehicle No
+        public JsonResult VehicleNo(string term)
+        {
+            var result = (from r in context.vehiclemasters.Where(x => x.DISPSTATUS == 0)
+                          join t in context.categorymasters.Where(x => x.DISPSTATUS == 0)
+                          on r.TRNSPRTID equals t.CATEID into y
+                          from k in y.DefaultIfEmpty()
+                          where r.VHLMDESC.ToLower().Contains(term.ToLower())
+                          select new { r.VHLMDESC, r.TRNSPRTID, k.CATENAME }).Distinct();
+            return Json(result, JsonRequestBehavior.AllowGet);
+        }//-----End of vehicle
+
+        public ActionResult checkpostdata(int? id = 0)
+        {
+            String idx = Request.Form.Get("id");
+
+            RemoteGateIn remotegateindetails = context.remotegateindetails.Find(idx);
+            if (remotegateindetails == null)
+                return HttpNotFound();
+            else
+                return View(remotegateindetails);
+        }
+
+        public ActionResult test1()
+        {
+            String idx = Request.Form.Get("id");
+            GateInDetail tab = new GateInDetail();
+            RemoteGateIn remote = new RemoteGateIn();
+            remote = context.remotegateindetails.Find(idx);
+            return View();
+        }
+
+        [Authorize(Roles = "ImportGateInPrint")]
+        public void PrintView(int? id = 0)
+        {
+            String constring = ConfigurationManager.ConnectionStrings["SCFSERP"].ConnectionString;
+            SqlConnectionStringBuilder stringbuilder = new SqlConnectionStringBuilder(constring);
+
+            context.Database.ExecuteSqlCommand("DELETE FROM TMPRPT_IDS WHERE KUSRID='" + Session["CUSRID"] + "'");
+            var TMPRPT_IDS = TMP_InsertPrint.InsertToTMP("TMPRPT_IDS", "IMPORTGATEIN", Convert.ToInt32(id), Session["CUSRID"].ToString());
+
+            if (TMPRPT_IDS == "Successfully Added")
+            {
+                ReportDocument cryRpt = new ReportDocument();
+                TableLogOnInfos crtableLogoninfos = new TableLogOnInfos();
+                TableLogOnInfo crtableLogoninfo = new TableLogOnInfo();
+                ConnectionInfo crConnectionInfo = new ConnectionInfo();
+                Tables CrTables;
+
+                cryRpt.Load(ConfigurationManager.AppSettings["Reporturl"] + "Import_GateIn.rpt");
+                cryRpt.RecordSelectionFormula = "{VW_IMPORT_GATE_IN_PRINT_ASSGN.KUSRID} ='" + Session["CUSRID"].ToString() + "' and {VW_IMPORT_GATE_IN_PRINT_ASSGN.GIDID} =" + id;
+
+                crConnectionInfo.ServerName = stringbuilder.DataSource;
+                crConnectionInfo.DatabaseName = stringbuilder.InitialCatalog;
+                crConnectionInfo.UserID = stringbuilder.UserID;
+                crConnectionInfo.Password = stringbuilder.Password;
+
+                CrTables = cryRpt.Database.Tables;
+                foreach (CrystalDecisions.CrystalReports.Engine.Table CrTable in CrTables)
+                {
+                    crtableLogoninfo = CrTable.LogOnInfo;
+                    crtableLogoninfo.ConnectionInfo = crConnectionInfo;
+                    CrTable.ApplyLogOnInfo(crtableLogoninfo);
+                }
+
+                cryRpt.ExportToHttpResponse(ExportFormatType.PortableDocFormat, System.Web.HttpContext.Current.Response, false, "");
+                cryRpt.Close();
+                cryRpt.Dispose();
+                GC.Collect();
+                stringbuilder.Clear();
+            }
+
+        }
+
+        [Authorize(Roles = "ImportGateInPrint")]
+        public void TPrintView(int? id = 0)/*truck*/
+        {
+            String constring = ConfigurationManager.ConnectionStrings["SCFSERP"].ConnectionString;
+            SqlConnectionStringBuilder stringbuilder = new SqlConnectionStringBuilder(constring);
+            context.Database.ExecuteSqlCommand("DELETE FROM TMPRPT_IDS WHERE KUSRID='" + Session["CUSRID"] + "'");
+            var TMPRPT_IDS = TMP_InsertPrint.InsertToTMP("TMPRPT_IDS", "IMPORTTRUCKIN", Convert.ToInt32(id), Session["CUSRID"].ToString());
+            if (TMPRPT_IDS == "Successfully Added")
+            {
+                ReportDocument cryRpt = new ReportDocument();
+                TableLogOnInfos crtableLogoninfos = new TableLogOnInfos();
+                TableLogOnInfo crtableLogoninfo = new TableLogOnInfo();
+                ConnectionInfo crConnectionInfo = new ConnectionInfo();
+                Tables CrTables;
+
+                cryRpt.Load(ConfigurationManager.AppSettings["Reporturl"] + "Import_TruckIn.rpt");
+                cryRpt.RecordSelectionFormula = "{VW_IMPORT_GATE_IN_PRINT_ASSGN.KUSRID} ='" + Session["CUSRID"].ToString() + "' and {VW_IMPORT_GATE_IN_PRINT_ASSGN.GIDID} =" + id;
+
+                crConnectionInfo.ServerName = stringbuilder.DataSource;
+                crConnectionInfo.DatabaseName = stringbuilder.InitialCatalog;
+                crConnectionInfo.UserID = stringbuilder.UserID;
+                crConnectionInfo.Password = stringbuilder.Password;
+
+                CrTables = cryRpt.Database.Tables;
+                foreach (CrystalDecisions.CrystalReports.Engine.Table CrTable in CrTables)
+                {
+                    crtableLogoninfo = CrTable.LogOnInfo;
+                    crtableLogoninfo.ConnectionInfo = crConnectionInfo;
+                    CrTable.ApplyLogOnInfo(crtableLogoninfo);
+                }
+
+                cryRpt.ExportToHttpResponse(ExportFormatType.PortableDocFormat, System.Web.HttpContext.Current.Response, false, "");
+                cryRpt.Close();
+                cryRpt.Dispose();
+                GC.Collect();
+                stringbuilder.Clear();
+            }
+        }
+
+
+        //--------Delete Row----------
+        [Authorize(Roles = "ImportGateInDelete")]
+        public void Del()
+        {
+            String id = Request.Form.Get("id");
+            String fld = Request.Form.Get("fld");
+            String temp = Delete_fun.delete_check1(fld, id);
+            if (temp.Equals("PROCEED"))
+            {
+                GateInDetail gateindetails = new GateInDetail();
+                //var sql = context.Database.SqlQuery<int>("SELECT GIDID from GATEINDETAIL where BOEDID=" + Convert.ToInt32(id)).ToList();
+                //var gidid = (sql[0]).ToString();
+
+                //gateindetails = context.gateindetails.Find(Convert.ToInt32(gidid));
+                gateindetails = context.gateindetails.Find(Convert.ToInt32(id));
+                context.gateindetails.Remove(gateindetails);
+                gateindetails = context.gateindetails.Find(Convert.ToInt32(id));
+                context.gateindetails.Remove(gateindetails);
+                context.SaveChanges();
+
+                Response.Write("Deleted Successfully ...");
+            }
+            else
+
+                Response.Write(temp);
+
+        }//-----End of Delete Row
+
+        // ========================= Edit Log Pages =========================
+        public ActionResult EditLog()
+        {
+            if (Convert.ToInt32(Session["compyid"]) == 0) { return RedirectToAction("Login", "Account"); }
+            return View();
+        }
+
+        public ActionResult EditLogGateIn(int? gidid, DateTime? from = null, DateTime? to = null, string user = null, string fieldName = null, string version = null)
+        {
+            if (Convert.ToInt32(Session["compyid"]) == 0) { return RedirectToAction("Login", "Account"); }
+
+            var list = new List<scfs_erp.Models.GateInDetailEditLogRow>();
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (cs != null && !string.IsNullOrWhiteSpace(cs.ConnectionString))
+            {
+                // Get actual GIDNO string from database to handle leading zeros (e.g., "04097")
+                string gidnoString = null;
+                if (gidid.HasValue)
+                {
+                    try
+                    {
+                        var gateInRecord = context.gateindetails.AsNoTracking().FirstOrDefault(x => x.GIDID == gidid.Value);
+                        if (gateInRecord != null && !string.IsNullOrEmpty(gateInRecord.GIDNO))
+                        {
+                            gidnoString = gateInRecord.GIDNO;
+                        }
+                        else
+                        {
+                            gidnoString = gidid.Value.ToString();
+                        }
+                    }
+                    catch { gidnoString = gidid.Value.ToString(); }
+                }
+
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                using (var cmd = new SqlCommand(@"SELECT TOP 2000 [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
+                                                FROM [dbo].[GateInDetailEditLog]
+                                                WHERE [Modules] = 'ImportGateIn'
+                                                  AND (@GIDNO_STR IS NULL OR CAST([GIDNO] AS NVARCHAR(50)) = @GIDNO_STR OR CAST([GIDNO] AS NVARCHAR(50)) = CAST(@GIDNO AS NVARCHAR(50)))
+                                                  AND (@FROM IS NULL OR [ChangedOn] >= @FROM)
+                                                  AND (@TO   IS NULL OR [ChangedOn] <  DATEADD(day, 1, @TO))
+                                                  AND (@USER IS NULL OR [ChangedBy] LIKE @USERPAT)
+                                                  AND (@FIELD IS NULL OR [FieldName] LIKE @FIELDPAT)
+                                                  AND (@VERSION IS NULL OR [Version] LIKE @VERPAT)
+                                                  AND NOT (RTRIM(LTRIM([Version])) IN ('0','V0') OR LEFT(RTRIM(LTRIM([Version])),3) IN ('v0-','V0-'))
+                                                ORDER BY [ChangedOn] DESC, [GIDNO] DESC", sql))
+                {
+                    cmd.Parameters.Add("@GIDNO", System.Data.SqlDbType.Int);
+                    cmd.Parameters.Add("@GIDNO_STR", System.Data.SqlDbType.NVarChar, 50);
+                    cmd.Parameters["@GIDNO"].Value = gidid.HasValue ? (object)gidid.Value : DBNull.Value;
+                    cmd.Parameters["@GIDNO_STR"].Value = !string.IsNullOrEmpty(gidnoString) ? (object)gidnoString : DBNull.Value;
+                    cmd.Parameters.AddWithValue("@FROM", (object)from ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@TO", (object)to ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@USER", string.IsNullOrWhiteSpace(user) ? (object)DBNull.Value : user);
+                    cmd.Parameters.AddWithValue("@USERPAT", string.IsNullOrWhiteSpace(user) ? (object)DBNull.Value : (object)("%" + user + "%"));
+                    cmd.Parameters.AddWithValue("@FIELD", string.IsNullOrWhiteSpace(fieldName) ? (object)DBNull.Value : fieldName);
+                    cmd.Parameters.AddWithValue("@FIELDPAT", string.IsNullOrWhiteSpace(fieldName) ? (object)DBNull.Value : (object)("%" + fieldName + "%"));
+                    cmd.Parameters.AddWithValue("@VERSION", string.IsNullOrWhiteSpace(version) ? (object)DBNull.Value : version);
+                    cmd.Parameters.AddWithValue("@VERPAT", string.IsNullOrWhiteSpace(version) ? (object)DBNull.Value : (object)("%" + version + "%"));
+                    sql.Open();
+                    using (var r = cmd.ExecuteReader())
+                    {
+                        while (r.Read())
+                        {
+                            list.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                            {
+                                GIDNO = Convert.ToString(r["GIDNO"]),
+                                FieldName = Convert.ToString(r["FieldName"]),
+                                OldValue = r["OldValue"] == DBNull.Value ? null : Convert.ToString(r["OldValue"]),
+                                NewValue = r["NewValue"] == DBNull.Value ? null : Convert.ToString(r["NewValue"]),
+                                ChangedBy = Convert.ToString(r["ChangedBy"]),
+                                ChangedOn = r["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r["ChangedOn"]) : DateTime.MinValue,
+                                Version = r["Version"] == DBNull.Value ? null : Convert.ToString(r["Version"]),
+                                Modules = r["Modules"] == DBNull.Value ? null : Convert.ToString(r["Modules"])
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Map raw DB codes to form-friendly display values for known fields
+            try
+            {
+                // Build lookup dictionaries once
+                var dictSlot = context.slotmasters.ToDictionary(x => x.SLOTID, x => x.SLOTDESC);
+                var dictRow = context.rowmasters.ToDictionary(x => x.ROWID, x => x.ROWDESC);
+                var dictPrdtGrp = context.productgroupmasters.ToDictionary(x => x.PRDTGID, x => x.PRDTGDESC);
+                var dictPrdtType = context.producttypemasters.ToDictionary(x => x.PRDTTID, x => x.PRDTTDESC);
+                var dictContType = context.containertypemasters.ToDictionary(x => x.CONTNRTID, x => x.CONTNRTDESC);
+                var dictContSize = context.containersizemasters.ToDictionary(x => x.CONTNRSID, x => x.CONTNRSDESC);
+                var dictGpMode = context.gpmodemasters.ToDictionary(x => x.GPMODEID, x => x.GPMODEDESC);
+                var dictPortType = context.porttypemaster.ToDictionary(x => x.GPPTYPE, x => x.GPPTYPEDESC);
+                var dictSealType = context.exportsealtypemasters.ToDictionary(x => x.GPETYPE, x => x.GPETYPEDESC);
+
+                string Map(string field, string raw)
+                {
+                    if (raw == null) return raw;
+                    var f = (field ?? string.Empty).Trim();
+                    var val = raw.Trim();
+                    if (string.IsNullOrEmpty(val)) return raw;
+                    int ival;
+                    switch (f.ToUpperInvariant())
+                    {
+                        case "SLOTID":
+                            return int.TryParse(val, out ival) && dictSlot.ContainsKey(ival) ? dictSlot[ival] : raw;
+                        case "ROWID":
+                            return int.TryParse(val, out ival) && dictRow.ContainsKey(ival) ? dictRow[ival] : raw;
+                        case "PRDTGID":
+                            return int.TryParse(val, out ival) && dictPrdtGrp.ContainsKey(ival) ? dictPrdtGrp[ival] : raw;
+                        case "PRDTTID":
+                            return int.TryParse(val, out ival) && dictPrdtType.ContainsKey(ival) ? dictPrdtType[ival] : raw;
+                        case "CONTNRTID":
+                            return int.TryParse(val, out ival) && dictContType.ContainsKey(ival) ? dictContType[ival] : raw;
+                        case "CONTNRSID":
+                            return int.TryParse(val, out ival) && dictContSize.ContainsKey(ival) ? dictContSize[ival] : raw;
+                        case "GPMODEID":
+                            return int.TryParse(val, out ival) && dictGpMode.ContainsKey(ival) ? dictGpMode[ival] : raw;
+                        case "GPPTYPE":
+                            return int.TryParse(val, out ival) && dictPortType.ContainsKey(ival) ? dictPortType[ival] : raw;
+                        case "GPETYPE":
+                            return int.TryParse(val, out ival) && dictSealType.ContainsKey(ival) ? dictSealType[ival] : raw;
+                        case "GPSTYPE":
+                        case "GPWTYPE":
+                        case "GPSCNTYPE":
+                            return val == "1" ? "YES" : val == "0" ? "NO" : raw;
+                        case "GPSCNMTYPE":
+                            if (val == "1") return "MISMATCH";
+                            if (val == "2") return "CLEAN";
+                            if (val == "3") return "NOT SCANNED";
+                            return raw;
+                        case "GFCLTYPE":
+                            return val == "1" ? "FCL" : val == "0" ? "LCL" : raw;
+                        case "GRADEID":
+                            return val == "2" ? "YES" : val == "1" ? "NO" : raw;
+                        default:
+                            return raw;
+                    }
+                }
+
+                string Friendly(string field)
+                {
+                    if (string.IsNullOrWhiteSpace(field)) return field;
+                    var f = field.Trim();
+                    switch (f.ToUpperInvariant())
+                    {
+                        case "GIDATE": return "In Date";
+                        case "GITIME": return "In Time";
+                        case "GICCTLDATE": return "Port Out Date";
+                        case "GICCTLTIME": return "Port Out Time";
+                        case "GINO": return "Gate In No";
+                        case "GIDNO": return "No";
+                        case "GPREFNO": return "Ref No";
+                        case "DRVNAME": return "Driver Name";
+                        case "TRNSPRTNAME": return "Transpoter Name";
+                        case "GTRNSPRTNAME": return "Other Transpoter Name";
+                        case "VHLNO": return "Vehicle No";
+                        case "GPNRNO": return "PNR No";
+                        case "VSLNAME":
+                        case "VSLID": return "Vessel Name";
+                        case "VOYNO": return "Voyage No";
+                        case "IGMNO": return "IGM No.";
+                        case "GPLNO": return "Line No";
+                        case "IMPRTNAME":
+                        case "IMPRTID": return "Importer Name";
+                        case "STMRNAME":
+                        case "STMRID": return "Steamer Name";
+                        case "CHANAME": return "CHA Name";
+                        case "BOENO": return "Bill of Entry No";
+                        case "BOEDATE": return "Bill of Entry Date";
+                        case "CONTNRNO": return "Container No";
+                        case "CONTNRSID": return "Size";
+                        case "CONTNRTID": return "Type";
+                        case "GIISOCODE": return "ISO Code";
+                        case "LPSEALNO": return "L.seal no";
+                        case "CSEALNO": return "C.seal no";
+                        case "ROWID": return "Row";
+                        case "SLOTID": return "Slot";
+                        case "PRDTGID": return "Product Category";
+                        case "PRDTDESC": return "Product Description";
+                        case "GPWTYPE": return "Weightment";
+                        case "GPWGHT": return "Weight";
+                        case "GPPTYPE": return "Port";
+                        case "IGMDATE": return "IGM Date";
+                        case "BLNO": return "BL No.";
+                        case "GFCLTYPE": return "FCL";
+                        case "GIDMGDESC": return "Damage";
+                        case "GPMODEID": return "GP Mode";
+                        case "GPETYPE": return "Seal Type";
+                        case "GPSTYPE": return "S.Amend / Mismatch";
+                        case "GPEAMT": return "SSR/Escort";
+                        case "GPAAMT": return "Addtnl. Amount";
+                        case "GPSCNTYPE": return "Scanned";
+                        case "GPSCNMTYPE": return "Scan Type";
+                        case "GRADEID": return "Refer(Plug)";
+                        default: return field; // fallback to technical name
+                    }
+                }
+
+                foreach (var row in list)
+                {
+                    row.OldValue = Map(row.FieldName, row.OldValue);
+                    row.NewValue = Map(row.FieldName, row.NewValue);
+                    row.FieldName = Friendly(row.FieldName);
+                }
+            }
+            catch { /* Best-effort mapping; do not fail page if lookups have issues */ }
+
+            return View(list);
+        }
+
+        // Compare two versions for a given GIDNO
+        public ActionResult EditLogGateInCompare(int? gidid, string versionA, string versionB)
+        {
+            if (Convert.ToInt32(Session["compyid"]) == 0) { return RedirectToAction("Login", "Account"); }
+
+            // Fallbacks: try alternate parameter names that routing might provide
+            if (gidid == null)
+            {
+                int tmp;
+                var qsGid = Request["gidid"] ?? Request["id"];
+                if (!string.IsNullOrWhiteSpace(qsGid) && int.TryParse(qsGid, out tmp))
+                {
+                    gidid = tmp;
+                }
+            }
+
+            if (gidid == null || string.IsNullOrWhiteSpace(versionA) || string.IsNullOrWhiteSpace(versionB))
+            {
+                TempData["Err"] = "Please provide GIDNO, Version A and Version B to compare.";
+                return RedirectToAction("EditLogGateIn", new { gidid = gidid });
+            }
+
+            // Normalize version strings (trim whitespace) and support baseline shortcuts
+            versionA = (versionA ?? string.Empty).Trim();
+            versionB = (versionB ?? string.Empty).Trim();
+            // Map '0' or 'v0'/'V0' to 'v0-<GIDNO>' for baseline comparisons
+            string gidnoString = gidid.Value.ToString();
+            try
+            {
+                var gateInRecord = context.gateindetails.AsNoTracking().FirstOrDefault(x => x.GIDID == gidid.Value);
+                if (gateInRecord != null && !string.IsNullOrEmpty(gateInRecord.GIDNO))
+                {
+                    gidnoString = gateInRecord.GIDNO;
+                }
+            }
+            catch { /* fallback to gidid.Value.ToString() */ }
+
+            if (gidid.HasValue)
+            {
+                var baseLabel = "v0-" + gidnoString;
+                if (string.Equals(versionA, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionA, "V0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionA, "v0", StringComparison.OrdinalIgnoreCase))
+                    versionA = baseLabel;
+                if (string.Equals(versionB, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionB, "V0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionB, "v0", StringComparison.OrdinalIgnoreCase))
+                    versionB = baseLabel;
+            }
+
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            var a = new List<scfs_erp.Models.GateInDetailEditLogRow>();
+            var b = new List<scfs_erp.Models.GateInDetailEditLogRow>();
+            if (cs != null && !string.IsNullOrWhiteSpace(cs.ConnectionString))
+            {
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                using (var cmd = new SqlCommand(@"SELECT [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
+                                                FROM [dbo].[GateInDetailEditLog]
+                                                WHERE (CAST([GIDNO] AS NVARCHAR(50))=@GIDNO_STR OR CAST([GIDNO] AS NVARCHAR(50))=CAST(@GIDNO AS NVARCHAR(50))) AND RTRIM(LTRIM([Version]))=@V AND [Modules]='ImportGateIn'", sql))
+                {
+                    cmd.Parameters.Add("@GIDNO", System.Data.SqlDbType.Int);
+                    cmd.Parameters.Add("@GIDNO_STR", System.Data.SqlDbType.NVarChar, 50);
+                    cmd.Parameters.Add("@V", System.Data.SqlDbType.NVarChar, 100);
+
+                    sql.Open();
+                    cmd.Parameters["@GIDNO"].Value = gidid.Value;
+                    cmd.Parameters["@GIDNO_STR"].Value = gidnoString;
+                    cmd.Parameters["@V"].Value = versionA.Trim();
+                    using (var r = cmd.ExecuteReader())
+                    {
+                        while (r.Read())
+                        {
+                            a.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                            {
+                                GIDNO = gidid.Value.ToString(),
+                                FieldName = Convert.ToString(r["FieldName"]),
+                                OldValue = r["OldValue"] == DBNull.Value ? null : Convert.ToString(r["OldValue"]),
+                                NewValue = r["NewValue"] == DBNull.Value ? null : Convert.ToString(r["NewValue"]),
+                                ChangedBy = Convert.ToString(r["ChangedBy"]),
+                                ChangedOn = r["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r["ChangedOn"]) : DateTime.MinValue,
+                                Version = versionA,
+                                Modules = r["Modules"] == DBNull.Value ? null : Convert.ToString(r["Modules"]) 
+                            });
+                        }
+                    }
+
+                    cmd.Parameters["@V"].Value = versionB.Trim();
+                    using (var r2 = cmd.ExecuteReader())
+                    {
+                        while (r2.Read())
+                        {
+                            b.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                            {
+                                GIDNO = gidid.Value.ToString(),
+                                FieldName = Convert.ToString(r2["FieldName"]),
+                                OldValue = r2["OldValue"] == DBNull.Value ? null : Convert.ToString(r2["OldValue"]),
+                                NewValue = r2["NewValue"] == DBNull.Value ? null : Convert.ToString(r2["NewValue"]),
+                                ChangedBy = Convert.ToString(r2["ChangedBy"]),
+                                ChangedOn = r2["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r2["ChangedOn"]) : DateTime.MinValue,
+                                Version = versionB,
+                                Modules = r2["Modules"] == DBNull.Value ? null : Convert.ToString(r2["Modules"]) 
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Map technical field names to friendly form labels and raw codes to display values
+            try
+            {
+                // Build lookup dictionaries once
+                var dictSlot = context.slotmasters.ToDictionary(x => x.SLOTID, x => x.SLOTDESC);
+                var dictRow = context.rowmasters.ToDictionary(x => x.ROWID, x => x.ROWDESC);
+                var dictPrdtGrp = context.productgroupmasters.ToDictionary(x => x.PRDTGID, x => x.PRDTGDESC);
+                var dictPrdtType = context.producttypemasters.ToDictionary(x => x.PRDTTID, x => x.PRDTTDESC);
+                var dictContType = context.containertypemasters.ToDictionary(x => x.CONTNRTID, x => x.CONTNRTDESC);
+                var dictContSize = context.containersizemasters.ToDictionary(x => x.CONTNRSID, x => x.CONTNRSDESC);
+                var dictGpMode = context.gpmodemasters.ToDictionary(x => x.GPMODEID, x => x.GPMODEDESC);
+                var dictPortType = context.porttypemaster.ToDictionary(x => x.GPPTYPE, x => x.GPPTYPEDESC);
+                var dictSealType = context.exportsealtypemasters.ToDictionary(x => x.GPETYPE, x => x.GPETYPEDESC);
+
+                string Map(string field, string raw)
+                {
+                    if (string.IsNullOrWhiteSpace(raw)) return raw;
+                    int ival;
+                    switch (field?.ToUpperInvariant())
+                    {
+                        case "SLOTID":
+                            return int.TryParse(raw, out ival) && dictSlot.ContainsKey(ival) ? dictSlot[ival] : raw;
+                        case "ROWID":
+                            return int.TryParse(raw, out ival) && dictRow.ContainsKey(ival) ? dictRow[ival] : raw;
+                        case "PRDTGID":
+                            return int.TryParse(raw, out ival) && dictPrdtGrp.ContainsKey(ival) ? dictPrdtGrp[ival] : raw;
+                        case "PRDTTID":
+                            return int.TryParse(raw, out ival) && dictPrdtType.ContainsKey(ival) ? dictPrdtType[ival] : raw;
+                        case "CONTNRTID":
+                            return int.TryParse(raw, out ival) && dictContType.ContainsKey(ival) ? dictContType[ival] : raw;
+                        case "CONTNRSID":
+                            return int.TryParse(raw, out ival) && dictContSize.ContainsKey(ival) ? dictContSize[ival] : raw;
+                        case "GPMODEID":
+                            return int.TryParse(raw, out ival) && dictGpMode.ContainsKey(ival) ? dictGpMode[ival] : raw;
+                        case "GPPTYPE":
+                            return int.TryParse(raw, out ival) && dictPortType.ContainsKey(ival) ? dictPortType[ival] : raw;
+                        case "GPETYPE":
+                            return int.TryParse(raw, out ival) && dictSealType.ContainsKey(ival) ? dictSealType[ival] : raw;
+                        case "GPSTYPE":
+                        case "GPWTYPE":
+                        case "GPSCNTYPE":
+                            return raw == "1" ? "YES" : raw == "0" ? "NO" : raw;
+                        case "GPSCNMTYPE":
+                            if (raw == "1") return "MISMATCH";
+                            if (raw == "2") return "CLEAN";
+                            if (raw == "3") return "NOT SCANNED";
+                            return raw;
+                        case "GFCLTYPE":
+                            return raw == "1" ? "FCL" : raw == "0" ? "LCL" : raw;
+                        case "GRADEID":
+                            return raw == "2" ? "YES" : raw == "1" ? "NO" : raw;
+                        default:
+                            return raw;
+                    }
+                }
+
+                string Friendly(string field)
+                {
+                    if (string.IsNullOrWhiteSpace(field)) return field;
+                    switch (field.ToUpperInvariant())
+                    {
+                        case "GIDATE": return "In Date";
+                        case "GITIME": return "In Time";
+                        case "GICCTLDATE": return "Port Out Date";
+                        case "GICCTLTIME": return "Port Out Time";
+                        case "GINO": return "Gate In No";
+                        case "GIDNO": return "No";
+                        case "GPREFNO": return "Ref No";
+                        case "DRVNAME": return "Driver Name";
+                        case "TRNSPRTNAME": return "Transpoter Name";
+                        case "GTRNSPRTNAME": return "Other Transpoter Name";
+                        case "VHLNO": return "Vehicle No";
+                        case "GPNRNO": return "PNR No";
+                        case "VSLNAME":
+                        case "VSLID": return "Vessel Name";
+                        case "VOYNO": return "Voyage No";
+                        case "IGMNO": return "IGM No.";
+                        case "GPLNO": return "Line No";
+                        case "IMPRTNAME":
+                        case "IMPRTID": return "Importer Name";
+                        case "STMRNAME":
+                        case "STMRID": return "Steamer Name";
+                        case "CHANAME": return "CHA Name";
+                        case "BOENO": return "Bill of Entry No";
+                        case "BOEDATE": return "Bill of Entry Date";
+                        case "CONTNRNO": return "Container No";
+                        case "CONTNRSID": return "Size";
+                        case "CONTNRTID": return "Type";
+                        case "GIISOCODE": return "ISO Code";
+                        case "LPSEALNO": return "L.seal no";
+                        case "CSEALNO": return "C.seal no";
+                        case "ROWID": return "Row";
+                        case "SLOTID": return "Slot";
+                        case "PRDTGID": return "Product Category";
+                        case "PRDTDESC": return "Product Description";
+                        case "GPWTYPE": return "Weightment";
+                        case "GPWGHT": return "Weight";
+                        case "GPPTYPE": return "Port";
+                        case "IGMDATE": return "IGM Date";
+                        case "BLNO": return "BL No.";
+                        case "GFCLTYPE": return "FCL";
+                        case "GIDMGDESC": return "Damage";
+                        case "GPMODEID": return "GP Mode";
+                        case "GPETYPE": return "SSR/Escort";
+                        case "GPSTYPE": return "S.Amend / Mismatch";
+                        case "GPEAMT": return "SSR/Escort Amount";
+                        case "GPAAMT": return "Addtnl. Amount";
+                        case "GPSCNTYPE": return "Scanned";
+                        case "GPSCNMTYPE": return "Scan Type";
+                        case "GRADEID": return "Refer(Plug)";
+                        default: return field; // fallback to technical name
+                    }
+                }
+
+                foreach (var row in a)
+                {
+                    row.OldValue = Map(row.FieldName, row.OldValue);
+                    row.NewValue = Map(row.FieldName, row.NewValue);
+                    row.FieldName = Friendly(row.FieldName);
+                }
+                foreach (var row in b)
+                {
+                    row.OldValue = Map(row.FieldName, row.OldValue);
+                    row.NewValue = Map(row.FieldName, row.NewValue);
+                    row.FieldName = Friendly(row.FieldName);
+                }
+            }
+            catch { /* best-effort mapping for compare page */ }
+
+            ViewBag.GIDNO = gidid.Value;
+            ViewBag.VersionA = versionA;
+            ViewBag.VersionB = versionB;
+            ViewBag.RowsA = a;
+            ViewBag.RowsB = b;
+
+            return View();
+        }
+
+        public ActionResult EditLogGateInExBond(int? gidid, DateTime? from = null, DateTime? to = null, string user = null, string fieldName = null, string version = null)
+        {
+            if (Convert.ToInt32(Session["compyid"]) == 0) { return RedirectToAction("Login", "Account"); }
+
+            // For ExBond, if gidid (EBNDID) is provided, look up the corresponding EBNDDNO
+            string searchGidno = null;
+            if (gidid.HasValue)
+            {
+                try
+                {
+                    using (var bondContext = new scfs_erp.Context.BondContext())
+                    {
+                        var exBond = bondContext.exbondinfodtls.AsNoTracking().FirstOrDefault(x => x.EBNDID == gidid.Value);
+                        if (exBond != null)
+                        {
+                            searchGidno = exBond.EBNDDNO ?? gidid.Value.ToString();
+                        }
+                        else
+                        {
+                            searchGidno = gidid.Value.ToString();
+                        }
+                    }
+                }
+                catch
+                {
+                    searchGidno = gidid.Value.ToString();
+                }
+            }
+
+            var list = new List<scfs_erp.Models.GateInDetailEditLogRow>();
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (cs != null && !string.IsNullOrWhiteSpace(cs.ConnectionString))
+            {
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                using (var cmd = new SqlCommand(@"SELECT TOP 2000 [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
+                                                FROM [dbo].[GateInDetailEditLog]
+                                                WHERE (@GIDNO IS NULL OR CAST([GIDNO] AS NVARCHAR(50)) = @GIDNO)
+                                                  AND (@FROM IS NULL OR [ChangedOn] >= @FROM)
+                                                  AND (@TO   IS NULL OR [ChangedOn] <  DATEADD(day, 1, @TO))
+                                                  AND (@USER IS NULL OR [ChangedBy] LIKE @USERPAT)
+                                                  AND (@FIELD IS NULL OR [FieldName] LIKE @FIELDPAT)
+                                                  AND (@VERSION IS NULL OR [Version] LIKE @VERPAT)
+                                                  AND [Modules] = 'ExBondGateIn'
+                                                ORDER BY [GIDNO] DESC, [Version] DESC, [ChangedOn] DESC", sql))
+                {
+                    cmd.Parameters.Add("@GIDNO", System.Data.SqlDbType.NVarChar, 50);
+                    cmd.Parameters.Add("@FROM", System.Data.SqlDbType.DateTime);
+                    cmd.Parameters.Add("@TO", System.Data.SqlDbType.DateTime);
+                    cmd.Parameters.Add("@USER", System.Data.SqlDbType.VarChar, 100);
+                    cmd.Parameters.Add("@USERPAT", System.Data.SqlDbType.VarChar, 200);
+                    cmd.Parameters.Add("@FIELD", System.Data.SqlDbType.VarChar, 100);
+                    cmd.Parameters.Add("@FIELDPAT", System.Data.SqlDbType.VarChar, 200);
+                    cmd.Parameters.Add("@VERSION", System.Data.SqlDbType.VarChar, 50);
+                    cmd.Parameters.Add("@VERPAT", System.Data.SqlDbType.VarChar, 100);
+
+                    cmd.Parameters["@GIDNO"].Value = !string.IsNullOrEmpty(searchGidno) ? (object)searchGidno : DBNull.Value;
+                    cmd.Parameters["@FROM"].Value = from.HasValue ? (object)from.Value : DBNull.Value;
+                    cmd.Parameters["@TO"].Value = to.HasValue ? (object)to.Value : DBNull.Value;
+                    cmd.Parameters["@USER"].Value = !string.IsNullOrWhiteSpace(user) ? (object)user : DBNull.Value;
+                    cmd.Parameters["@USERPAT"].Value = !string.IsNullOrWhiteSpace(user) ? (object)("%" + user + "%") : DBNull.Value;
+                    cmd.Parameters["@FIELD"].Value = !string.IsNullOrWhiteSpace(fieldName) ? (object)fieldName : DBNull.Value;
+                    cmd.Parameters["@FIELDPAT"].Value = !string.IsNullOrWhiteSpace(fieldName) ? (object)("%" + fieldName + "%") : DBNull.Value;
+                    cmd.Parameters["@VERSION"].Value = !string.IsNullOrWhiteSpace(version) ? (object)version : DBNull.Value;
+                    cmd.Parameters["@VERPAT"].Value = !string.IsNullOrWhiteSpace(version) ? (object)("%" + version + "%") : DBNull.Value;
+
+                    sql.Open();
+                    using (var r = cmd.ExecuteReader())
+                    {
+                        while (r.Read())
+                        {
+                            list.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                            {
+                                GIDNO = Convert.ToString(r["GIDNO"]),
+                                FieldName = Convert.ToString(r["FieldName"]),
+                                OldValue = r["OldValue"] == DBNull.Value ? null : Convert.ToString(r["OldValue"]),
+                                NewValue = r["NewValue"] == DBNull.Value ? null : Convert.ToString(r["NewValue"]),
+                                ChangedBy = Convert.ToString(r["ChangedBy"]),
+                                ChangedOn = r["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r["ChangedOn"]) : DateTime.MinValue,
+                                Version = r["Version"] == DBNull.Value ? null : Convert.ToString(r["Version"]),
+                                Modules = r["Modules"] == DBNull.Value ? null : Convert.ToString(r["Modules"])
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Map raw DB codes to form-friendly display values for known fields
+            try
+            {
+                using (var bondContext = new scfs_erp.Context.BondContext())
+                {
+                    var dictPrdtGrp = bondContext.bondproductgroupmasters.ToDictionary(x => x.PRDTGID, x => x.PRDTGDESC);
+                    var dictContSize = bondContext.containersizemasters.ToDictionary(x => x.CONTNRSID, x => x.CONTNRSDESC);
+                    
+                    var bondTypes = bondContext.Database.SqlQuery<pr_get_BondMaster_Status_Result>("exec pr_get_Bond_Types").ToList();
+                    var dictBondType = bondTypes.ToDictionary(x => x.dval ?? 0, x => x.dtxt ?? "");
+
+                    string Map(string field, string raw)
+                    {
+                        if (raw == null) return raw;
+                        var f = (field ?? string.Empty).Trim();
+                        var val = raw.Trim();
+                        if (string.IsNullOrEmpty(val)) return raw;
+                        int ival;
+                        switch (f.ToUpperInvariant())
+                        {
+                            case "PRDTGID":
+                                return int.TryParse(val, out ival) && dictPrdtGrp.ContainsKey(ival) ? dictPrdtGrp[ival] : raw;
+                            case "CONTNRSID":
+                                if (int.TryParse(val, out ival))
+                                {
+                                    if (ival == 0) return "Not Required";
+                                    if (dictContSize.ContainsKey(ival)) return dictContSize[ival];
+                                }
+                                return raw;
+                            case "EBNDCTYPE":
+                                if (int.TryParse(val, out ival) && dictBondType.ContainsKey(ival))
+                                {
+                                    return dictBondType[ival];
+                                }
+                                return raw;
+                            case "DISPSTATUS":
+                                return val == "1" ? "Disabled" : val == "0" ? "Enabled" : raw;
+                            default:
+                                return raw;
+                        }
+                    }
+
+                    string Friendly(string field)
+                    {
+                        if (string.IsNullOrWhiteSpace(field)) return field;
+                        var f = field.Trim();
+                        switch (f.ToUpperInvariant())
+                        {
+                            case "EBNDDNO": return "Ex Bond No";
+                            case "EBNDNO": return "No";
+                            case "EBNDDATE": return "Ex Bond Delivery Date";
+                            case "EBNDEDATE": return "Valid Till Date";
+                            case "EBNDBENO": return "BE No";
+                            case "EBNDBEDATE": return "BE Date";
+                            case "EBNDNOC": return "No.of Containers";
+                            case "EBNDNOP": return "NOP";
+                            case "EBNDSPC": return "Space";
+                            case "EBNDASSAMT": return "Assessable Value";
+                            case "EBNDDTYAMT": return "Duty Value";
+                            case "EBNDINSAMT": return "Insurance Value";
+                            case "EBNDCTYPE": return "Bond Type";
+                            case "EBNDREMKRS": return "Remarks";
+                            case "CONTNRSID": return "Container Size";
+                            case "PRDTGID": return "Product Category";
+                            case "BNDID": return "Bond No";
+                            case "CHANAME": return "CHA Name";
+                            case "IMPRTNAME":
+                            case "IMPRTID": return "Importer Name";
+                            case "DISPSTATUS": return "Status";
+                            default: return field;
+                        }
+                    }
+
+                    foreach (var row in list)
+                    {
+                        row.OldValue = Map(row.FieldName, row.OldValue);
+                        row.NewValue = Map(row.FieldName, row.NewValue);
+                        row.FieldName = Friendly(row.FieldName);
+                    }
+                }
+            }
+            catch { /* Best-effort mapping; do not fail page if lookups have issues */ }
+
+            ViewBag.Module = "ExBondGateIn";
+            return View("~/Views/ImportGateIn/EditLogGateIn.cshtml", list);
+        }
+
+        // Compare two versions for EXbond GateIn
+        public ActionResult EditLogGateInExBondCompare(int? gidid, string versionA, string versionB)
+        {
+            if (Convert.ToInt32(Session["compyid"]) == 0) { return RedirectToAction("Login", "Account"); }
+
+            // For ExBond, if gidid (EBNDID) is provided, look up the corresponding EBNDDNO
+            string searchGidno = null;
+            if (gidid.HasValue)
+            {
+                try
+                {
+                    using (var bondContext = new scfs_erp.Context.BondContext())
+                    {
+                        var exBond = bondContext.exbondinfodtls.AsNoTracking().FirstOrDefault(x => x.EBNDID == gidid.Value);
+                        if (exBond != null)
+                        {
+                            searchGidno = exBond.EBNDDNO ?? gidid.Value.ToString();
+                        }
+                        else
+                        {
+                            searchGidno = gidid.Value.ToString();
+                        }
+                    }
+                }
+                catch
+                {
+                    searchGidno = gidid.Value.ToString();
+                }
+            }
+            else
+            {
+                searchGidno = Request["gidid"] ?? Request["ebnddno"];
+            }
+
+            if (string.IsNullOrWhiteSpace(searchGidno) || string.IsNullOrWhiteSpace(versionA) || string.IsNullOrWhiteSpace(versionB))
+            {
+                TempData["Err"] = "Please provide Ex Bond Number, Version A and Version B to compare.";
+                return RedirectToAction("EditLogGateInExBond", new { gidid = gidid });
+            }
+
+            // Normalize version strings
+            versionA = (versionA ?? string.Empty).Trim();
+            versionB = (versionB ?? string.Empty).Trim();
+            
+            // Map '0' or 'v0'/'V0' to 'v0-<EBNDDNO>' for baseline comparisons
+            var baseLabel = "v0-" + searchGidno;
+            if (string.Equals(versionA, "0", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(versionA, "V0", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(versionA, "v0", StringComparison.OrdinalIgnoreCase))
+                versionA = baseLabel;
+            if (string.Equals(versionB, "0", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(versionB, "V0", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(versionB, "v0", StringComparison.OrdinalIgnoreCase))
+                versionB = baseLabel;
+
+            var rowsA = new List<scfs_erp.Models.GateInDetailEditLogRow>();
+            var rowsB = new List<scfs_erp.Models.GateInDetailEditLogRow>();
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (cs != null && !string.IsNullOrWhiteSpace(cs.ConnectionString))
+            {
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                using (var cmd = new SqlCommand(@"SELECT [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
+                                                FROM [dbo].[GateInDetailEditLog]
+                                                WHERE [Modules] = 'ExBondGateIn'
+                                                  AND CAST([GIDNO] AS NVARCHAR(50)) = @GIDNO
+                                                  AND RTRIM(LTRIM([Version])) = @V", sql))
+                {
+                    cmd.Parameters.Add("@GIDNO", System.Data.SqlDbType.NVarChar, 50);
+                    cmd.Parameters.Add("@V", System.Data.SqlDbType.NVarChar, 100);
+
+                    sql.Open();
+                    cmd.Parameters["@GIDNO"].Value = searchGidno;
+                    cmd.Parameters["@V"].Value = versionA;
+                    using (var r = cmd.ExecuteReader())
+                    {
+                        while (r.Read())
+                        {
+                            rowsA.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                            {
+                                GIDNO = Convert.ToString(r["GIDNO"]),
+                                FieldName = Convert.ToString(r["FieldName"]),
+                                OldValue = r["OldValue"] == DBNull.Value ? null : Convert.ToString(r["OldValue"]),
+                                NewValue = r["NewValue"] == DBNull.Value ? null : Convert.ToString(r["NewValue"]),
+                                ChangedBy = Convert.ToString(r["ChangedBy"]),
+                                ChangedOn = r["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r["ChangedOn"]) : DateTime.MinValue,
+                                Version = versionA,
+                                Modules = r["Modules"] == DBNull.Value ? null : Convert.ToString(r["Modules"])
+                            });
+                        }
+                    }
+
+                    cmd.Parameters["@V"].Value = versionB;
+                    using (var r2 = cmd.ExecuteReader())
+                    {
+                        while (r2.Read())
+                        {
+                            rowsB.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                            {
+                                GIDNO = Convert.ToString(r2["GIDNO"]),
+                                FieldName = Convert.ToString(r2["FieldName"]),
+                                OldValue = r2["OldValue"] == DBNull.Value ? null : Convert.ToString(r2["OldValue"]),
+                                NewValue = r2["NewValue"] == DBNull.Value ? null : Convert.ToString(r2["NewValue"]),
+                                ChangedBy = Convert.ToString(r2["ChangedBy"]),
+                                ChangedOn = r2["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r2["ChangedOn"]) : DateTime.MinValue,
+                                Version = versionB,
+                                Modules = r2["Modules"] == DBNull.Value ? null : Convert.ToString(r2["Modules"])
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Map technical field names to friendly form labels
+            try
+            {
+                using (var bondContext = new scfs_erp.Context.BondContext())
+                {
+                    var dictPrdtGrp = bondContext.bondproductgroupmasters.ToDictionary(x => x.PRDTGID, x => x.PRDTGDESC);
+                    var dictContSize = bondContext.containersizemasters.ToDictionary(x => x.CONTNRSID, x => x.CONTNRSDESC);
+                    
+                    var bondTypes = bondContext.Database.SqlQuery<pr_get_BondMaster_Status_Result>("exec pr_get_Bond_Types").ToList();
+                    var dictBondType = bondTypes.ToDictionary(x => x.dval ?? 0, x => x.dtxt ?? "");
+
+                    string Map(string field, string raw)
+                    {
+                        if (string.IsNullOrWhiteSpace(raw)) return raw;
+                        int ival;
+                        switch (field?.ToUpperInvariant())
+                        {
+                            case "PRDTGID":
+                                return int.TryParse(raw, out ival) && dictPrdtGrp.ContainsKey(ival) ? dictPrdtGrp[ival] : raw;
+                            case "CONTNRSID":
+                                if (int.TryParse(raw, out ival))
+                                {
+                                    if (ival == 0) return "Not Required";
+                                    if (dictContSize.ContainsKey(ival)) return dictContSize[ival];
+                                }
+                                return raw;
+                            case "EBNDCTYPE":
+                                if (int.TryParse(raw, out ival) && dictBondType.ContainsKey(ival))
+                                {
+                                    return dictBondType[ival];
+                                }
+                                return raw;
+                            case "DISPSTATUS":
+                                return raw == "1" ? "Disabled" : raw == "0" ? "Enabled" : raw;
+                            default:
+                                return raw;
+                        }
+                    }
+
+                    string Friendly(string field)
+                    {
+                        if (string.IsNullOrWhiteSpace(field)) return field;
+                        var f = field.Trim();
+                        switch (f.ToUpperInvariant())
+                        {
+                            case "EBNDDNO": return "Ex Bond No";
+                            case "EBNDNO": return "No";
+                            case "EBNDDATE": return "Ex Bond Delivery Date";
+                            case "EBNDEDATE": return "Valid Till Date";
+                            case "EBNDBENO": return "BE No";
+                            case "EBNDBEDATE": return "BE Date";
+                            case "EBNDNOC": return "No.of Containers";
+                            case "EBNDNOP": return "NOP";
+                            case "EBNDSPC": return "Space";
+                            case "EBNDASSAMT": return "Assessable Value";
+                            case "EBNDDTYAMT": return "Duty Value";
+                            case "EBNDINSAMT": return "Insurance Value";
+                            case "EBNDCTYPE": return "Bond Type";
+                            case "EBNDREMKRS": return "Remarks";
+                            case "CONTNRSID": return "Container Size";
+                            case "PRDTGID": return "Product Category";
+                            case "BNDID": return "Bond No";
+                            case "CHANAME": return "CHA Name";
+                            case "IMPRTNAME":
+                            case "IMPRTID": return "Importer Name";
+                            case "DISPSTATUS": return "Status";
+                            default: return field;
+                        }
+                    }
+
+                    foreach (var row in rowsA)
+                    {
+                        row.OldValue = Map(row.FieldName, row.OldValue);
+                        row.NewValue = Map(row.FieldName, row.NewValue);
+                        row.FieldName = Friendly(row.FieldName);
+                    }
+                    foreach (var row in rowsB)
+                    {
+                        row.OldValue = Map(row.FieldName, row.OldValue);
+                        row.NewValue = Map(row.FieldName, row.NewValue);
+                        row.FieldName = Friendly(row.FieldName);
+                    }
+                }
+            }
+            catch { /* Best-effort mapping for compare page */ }
+
+            ViewBag.Module = "ExBondGateIn";
+            ViewBag.GIDNO = searchGidno;
+            ViewBag.VersionA = versionA;
+            ViewBag.VersionB = versionB;
+            ViewBag.RowsA = rowsA;
+            ViewBag.RowsB = rowsB;
+
+            return View("~/Views/ImportGateIn/EditLogGateInCompare.cshtml");
+        }
+
+        // ========================= Edit Logging Helper Methods =========================
+        private void LogGateInEdits(GateInDetail before, GateInDetail after, string userId)
+        {
+            if (before == null || after == null) 
+            {
+                System.Diagnostics.Debug.WriteLine($"LogGateInEdits: before={before != null}, after={after != null}");
+                return;
+            }
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (cs == null || string.IsNullOrWhiteSpace(cs.ConnectionString)) 
+            {
+                System.Diagnostics.Debug.WriteLine("LogGateInEdits: No SCFSERP_EditLog connection string found");
+                return;
+            }
+
+            // Exclude system or noisy fields and those you don't want to log
+            var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                // system/housekeeping fields that auto-update
+                "GIDID", "NGIDID", "PRCSDATE", "ESBDATE", "LMUSRID", "CUSRID",
+                // the unwanted gate pass dimension/weight fields
+                "GPTWGHT", "GPHEIGHT", "GPWIDTH", "GPLENGTH", "GPCBM", "GPGWGHT", "GPNWGHT", "GPNOP",
+                // system-mirrored fields
+                "AVHLNO", "CONTNRID", "YRDID", "COMPYID", "SDPTID", "GIVHLTYPE", "UNITID",
+                // IDs that have corresponding NAME fields
+                "TRNSPRTID", "IMPRTID", "STMRID", "CHAID", "BCHAID", "EXPRTRID", "CLNTID",
+                "VSLID", "BOEDID", "INVDID", "RGIDID", "ESBMID", "VHLMID", "PRE_CHAID",
+                "CONTNRFID", "CONDTNID", "CNTNRSID", "GSEALTYPE", "GSECTYPE"
+            };
+
+            // Compute the next version ONCE per save so all rows for this edit share the same Version
+            int nextVersion = 1;
+            try
+            {
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                using (var cmd = new SqlCommand(@"
+                    SELECT ISNULL(
+                        MAX(TRY_CAST(
+                            SUBSTRING([Version], 2, 
+                                CASE WHEN CHARINDEX('-', [Version]) > 0 
+                                     THEN CHARINDEX('-', [Version]) - 2 
+                                     ELSE LEN([Version]) - 1
+                                END
+                            ) AS INT)
+                        ), 0) + 1
+                    FROM [dbo].[GateInDetailEditLog]
+                    WHERE [GIDNO] = @GIDNO AND [Modules] = 'ImportGateIn'", sql))
+                {
+                    cmd.Parameters.AddWithValue("@GIDNO", after.GIDNO);
+                    sql.Open();
+                    var obj = cmd.ExecuteScalar();
+                    if (obj != null && obj != DBNull.Value)
+                        nextVersion = Convert.ToInt32(obj);
+                }
+            }
+            catch { /* ignore logging version errors */ }
+
+            var props = typeof(GateInDetail).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            foreach (var p in props)
+            {
+                if (!p.CanRead) continue;
+                // Skip complex navigation properties
+                if (p.PropertyType.IsClass && p.PropertyType != typeof(string) && !p.PropertyType.IsValueType)
+                    continue;
+                if (exclude.Contains(p.Name)) continue;
+
+                var ov = p.GetValue(before, null);
+                var nv = p.GetValue(after, null);
+
+                if (BothNull(ov, nv)) continue;
+
+                // Compare by underlying type to avoid logging formatting-only differences
+                var type = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+                bool changed;
+
+                if (type == typeof(decimal))
+                {
+                    var d1 = ToNullableDecimal(ov) ?? 0m;
+                    var d2 = ToNullableDecimal(nv) ?? 0m;
+                    // skip if both are zero-equivalent
+                    if (d1 == 0m && d2 == 0m) continue;
+                    changed = d1 != d2;
+                }
+                else if (type == typeof(double) || type == typeof(float))
+                {
+                    var d1 = Convert.ToDouble(ov ?? 0.0);
+                    var d2 = Convert.ToDouble(nv ?? 0.0);
+                    if (Math.Abs(d1) < 1e-9 && Math.Abs(d2) < 1e-9) continue;
+                    changed = Math.Abs(d1 - d2) > 1e-9;
+                }
+                else if (type == typeof(int) || type == typeof(long) || type == typeof(short))
+                {
+                    var i1 = Convert.ToInt64(ov ?? 0);
+                    var i2 = Convert.ToInt64(nv ?? 0);
+                    // For critical fields like GPETYPE, GPSTYPE, GPWTYPE, GRADEID, GFCLTYPE, always log changes even if both are 0
+                    if (p.Name.Equals("GPETYPE", StringComparison.OrdinalIgnoreCase) ||
+                        p.Name.Equals("GPSTYPE", StringComparison.OrdinalIgnoreCase) ||
+                        p.Name.Equals("GPWTYPE", StringComparison.OrdinalIgnoreCase) ||
+                        p.Name.Equals("GRADEID", StringComparison.OrdinalIgnoreCase) ||
+                        p.Name.Equals("GFCLTYPE", StringComparison.OrdinalIgnoreCase))
+                    {
+                        changed = i1 != i2;
+                    }
+                    else
+                    {
+                        if (i1 == 0 && i2 == 0) continue;
+                        changed = i1 != i2;
+                    }
+                }
+                else if (type == typeof(DateTime))
+                {
+                    DateTime? t1Nullable = ov as DateTime?;
+                    DateTime? t2Nullable = nv as DateTime?;
+                    
+                    if (!t1Nullable.HasValue && !t2Nullable.HasValue) continue;
+                    
+                    if (!t1Nullable.HasValue || !t2Nullable.HasValue)
+                    {
+                        changed = true;
+                    }
+                    else
+                    {
+                        var t1 = t1Nullable.Value;
+                        var t2 = t2Nullable.Value;
+                        
+                        if (p.Name.Contains("DATE") && !p.Name.Contains("TIME"))
+                        {
+                            changed = t1.Date != t2.Date;
+                        }
+                        else
+                        {
+                            t1 = new DateTime(t1.Year, t1.Month, t1.Day, t1.Hour, t1.Minute, t1.Second);
+                            t2 = new DateTime(t2.Year, t2.Month, t2.Day, t2.Hour, t2.Minute, t2.Second);
+                            changed = t1 != t2;
+                        }
+                    }
+                }
+                else if (type == typeof(string))
+                {
+                    var s1 = (Convert.ToString(ov) ?? string.Empty).Trim();
+                    var s2 = (Convert.ToString(nv) ?? string.Empty).Trim();
+                    bool def1 = string.IsNullOrEmpty(s1) || s1 == "-" || s1 == "0" || s1 == "0.0" || s1 == "0.00" || s1 == "0.000" || s1 == "0.0000";
+                    bool def2 = string.IsNullOrEmpty(s2) || s2 == "-" || s2 == "0" || s2 == "0.0" || s2 == "0.00" || s2 == "0.000" || s2 == "0.0000";
+                    if (def1 && def2) continue;
+                    changed = !string.Equals(s1, s2, StringComparison.Ordinal);
+                }
+                else
+                {
+                    var s1 = FormatVal(ov);
+                    var s2 = FormatVal(nv);
+                    changed = !string.Equals(s1, s2, StringComparison.Ordinal);
+                }
+
+                if (!changed) continue;
+
+                // Convert lookup IDs to display values before logging
+                var os = FormatValForLogging(p.Name, ov);
+                var ns = FormatValForLogging(p.Name, nv);
+
+                // Save the ORIGINAL property name (database column name) to maintain consistency
+                var versionLabel = $"V{nextVersion}-{after.GIDNO}";
+                System.Diagnostics.Debug.WriteLine($"Logging field change: {p.Name} = '{os}' -> '{ns}' for GIDNO={after.GIDNO}, Version={versionLabel}");
+                InsertEditLogRow(cs.ConnectionString, after.GIDNO, p.Name, os, ns, userId, versionLabel, "ImportGateIn");
+            }
+        }
+
+        private static string FormatVal(object value)
+        {
+            if (value == null) return null;
+            if (value is DateTime dt) return dt.ToString("yyyy-MM-dd HH:mm:ss");
+            if (value is DateTime?)
+            {
+                var ndt = (DateTime?)value;
+                return ndt.HasValue ? ndt.Value.ToString("yyyy-MM-dd HH:mm:ss") : null;
+            }
+            if (value is decimal dec) return dec.ToString("0.####");
+            var ndecs = value as decimal?;
+            if (ndecs.HasValue) return ndecs.Value.ToString("0.####");
+            return Convert.ToString(value);
+        }
+
+        // Format value for logging - converts lookup IDs to display values
+        private string FormatValForLogging(string fieldName, object value)
+        {
+            var formattedValue = FormatVal(value);
+            if (string.IsNullOrEmpty(formattedValue)) return formattedValue;
+
+            try
+            {
+                // Product Type lookup
+                if (fieldName.Equals("PRDTTID", StringComparison.OrdinalIgnoreCase))
+                {
+                    int productTypeId;
+                    if (int.TryParse(formattedValue, out productTypeId) && productTypeId > 0)
+                    {
+                        var productType = context.producttypemasters.FirstOrDefault(p => p.PRDTTID == productTypeId);
+                        if (productType != null && !string.IsNullOrEmpty(productType.PRDTTDESC))
+                        {
+                            return productType.PRDTTDESC;
+                        }
+                    }
+                }
+                // GPSCNMTYPE (S.Amend/Mismatch) value conversion
+                else if (fieldName.Equals("GPSCNMTYPE", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (formattedValue == "1") return "MISMATCH";
+                    if (formattedValue == "2") return "CLEAN";
+                    if (formattedValue == "3") return "NOT SCANNED";
+                    return formattedValue;
+                }
+                // GPSTYPE, GPWTYPE, GPETYPE, GPSCNTYPE conversion
+                else if (fieldName.Equals("GPSTYPE", StringComparison.OrdinalIgnoreCase) || 
+                         fieldName.Equals("GPWTYPE", StringComparison.OrdinalIgnoreCase) || 
+                         fieldName.Equals("GPETYPE", StringComparison.OrdinalIgnoreCase) ||
+                         fieldName.Equals("GPSCNTYPE", StringComparison.OrdinalIgnoreCase))
+                {
+                    return formattedValue == "1" ? "YES" : formattedValue == "0" ? "NO" : formattedValue;
+                }
+                // GFCLTYPE conversion
+                else if (fieldName.Equals("GFCLTYPE", StringComparison.OrdinalIgnoreCase))
+                {
+                    return formattedValue == "1" ? "FCL" : formattedValue == "0" ? "LCL" : formattedValue;
+                }
+                // GRADEID (Refer/Plug) conversion
+                else if (fieldName.Equals("GRADEID", StringComparison.OrdinalIgnoreCase))
+                {
+                    return formattedValue == "2" ? "YES" : formattedValue == "1" ? "NO" : formattedValue;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"FormatValForLogging lookup failed for {fieldName}: {ex.Message}");
+            }
+
+            return formattedValue;
+        }
+
+        private static bool BothNull(object a, object b) => a == null && b == null;
+
+        private static decimal? ToNullableDecimal(object v)
+        {
+            if (v == null) return null;
+            if (v is decimal d) return d;
+            var nd = v as decimal?;
+            if (nd.HasValue) return nd.Value;
+            decimal parsed;
+            return decimal.TryParse(Convert.ToString(v), out parsed) ? parsed : (decimal?)null;
+        }
+
+        private static void InsertEditLogRow(string connectionString, string gidno, string fieldName, string oldValue, string newValue, string changedBy, string versionLabel, string modules)
+        {
+            try
+            {
+                using (var sql = new SqlConnection(connectionString))
+                {
+                    sql.Open();
+                    using (var cmd = new SqlCommand(@"INSERT INTO [dbo].[GateInDetailEditLog]
+                        ([GIDNO], [FieldName], [OldValue], [NewValue], [ChangedBy], [ChangedOn], [Version], [Modules])
+                        VALUES (@GIDNO, @FieldName, @OldValue, @NewValue, @ChangedBy, GETDATE(), @Version, @Modules)", sql))
+                    {
+                        cmd.Parameters.AddWithValue("@GIDNO", gidno);
+                        cmd.Parameters.AddWithValue("@FieldName", fieldName);
+                        cmd.Parameters.AddWithValue("@OldValue", (object)oldValue ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@NewValue", (object)newValue ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@ChangedBy", changedBy ?? "");
+                        cmd.Parameters.AddWithValue("@Version", (object)versionLabel ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@Modules", modules ?? string.Empty);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to insert edit log: {ex.Message}");
+                throw;
+            }
+        }
+
+        // Ensure a baseline snapshot (Version = "0") exists for the given record.
+        private void EnsureBaselineVersionZero(GateInDetail snapshot, string userId)
+        {
+            try
+            {
+                var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+                if (cs == null || string.IsNullOrWhiteSpace(cs.ConnectionString)) return;
+
+                if (string.IsNullOrWhiteSpace(snapshot.GIDNO)) return;
+
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                using (var cmd = new SqlCommand("SELECT COUNT(1) FROM [dbo].[GateInDetailEditLog] WHERE [GIDNO]=@GIDNO AND [Modules]='ImportGateIn' AND (RTRIM(LTRIM([Version]))=@VLower OR RTRIM(LTRIM([Version]))=@VUpper OR RTRIM(LTRIM([Version]))='0' OR RTRIM(LTRIM([Version]))='V0')", sql))
+                {
+                    cmd.Parameters.AddWithValue("@GIDNO", snapshot.GIDNO);
+                    var baselineVerLower = "v0-" + snapshot.GIDNO;
+                    var baselineVerUpper = "V0-" + snapshot.GIDNO;
+                    cmd.Parameters.AddWithValue("@VLower", baselineVerLower);
+                    cmd.Parameters.AddWithValue("@VUpper", baselineVerUpper);
+                    sql.Open();
+                    var exists = Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+                    if (exists) return;
+                }
+
+                InsertBaselineSnapshot(snapshot, userId);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EnsureBaselineVersionZero failed: {ex.Message}");
+            }
+        }
+
+        // Insert one row per relevant field for Version = "0" using the provided snapshot values
+        private void InsertBaselineSnapshot(GateInDetail snapshot, string userId)
+        {
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (cs == null || string.IsNullOrWhiteSpace(cs.ConnectionString)) return;
+
+            if (string.IsNullOrWhiteSpace(snapshot.GIDNO)) return;
+            var baselineVer = "v0-" + snapshot.GIDNO;
+
+            var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "NGIDID", "PRCSDATE", "ESBDATE", "LMUSRID", "CUSRID",
+                "GPTWGHT", "GPHEIGHT", "GPWIDTH", "GPLENGTH", "GPCBM", "GPGWGHT", "GPNWGHT", "GPNOP",
+                "AVHLNO"
+            };
+
+            var props = typeof(GateInDetail).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            foreach (var p in props)
+            {
+                if (!p.CanRead) continue;
+                if (p.PropertyType.IsClass && p.PropertyType != typeof(string) && !p.PropertyType.IsValueType) continue;
+                if (exclude.Contains(p.Name)) continue;
+
+                if (p.Name.EndsWith("ID", StringComparison.OrdinalIgnoreCase))
+                {
+                    var baseName = p.Name.Substring(0, p.Name.Length - 2);
+                    var nameProp = props.FirstOrDefault(q => q.PropertyType == typeof(string) && (
+                        q.Name.Equals(baseName, StringComparison.OrdinalIgnoreCase) ||
+                        q.Name.Equals(baseName + "NAME", StringComparison.OrdinalIgnoreCase) ||
+                        (q.Name.EndsWith("NAME", StringComparison.OrdinalIgnoreCase) && q.Name.StartsWith(baseName, StringComparison.OrdinalIgnoreCase))
+                    ));
+                    if (nameProp != null) continue;
+                }
+
+                var valObj = p.GetValue(snapshot, null);
+                var type = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+
+                if (type == typeof(string))
+                {
+                    var s = (Convert.ToString(valObj) ?? string.Empty).Trim();
+                    bool isDefault = string.IsNullOrEmpty(s) || s == "-" || s == "0" || s == "0.0" || s == "0.00" || s == "0.000" || s == "0.0000";
+                    if (isDefault) continue;
+                }
+                else if (type == typeof(int) || type == typeof(long) || type == typeof(short))
+                {
+                    var i = Convert.ToInt64(valObj ?? 0);
+                    if (i == 0) continue;
+                }
+                else if (type == typeof(decimal))
+                {
+                    var d = ToNullableDecimal(valObj) ?? 0m;
+                    if (d == 0m) continue;
+                }
+                else if (type == typeof(double) || type == typeof(float))
+                {
+                    var d = Convert.ToDouble(valObj ?? 0.0);
+                    if (Math.Abs(d) < 1e-9) continue;
+                }
+
+                var newVal = FormatValForLogging(p.Name, valObj);
+                InsertEditLogRow(cs.ConnectionString, snapshot.GIDNO, p.Name, null, newVal, userId, baselineVer, "ImportGateIn");
+            }
+        }
+    }
+}

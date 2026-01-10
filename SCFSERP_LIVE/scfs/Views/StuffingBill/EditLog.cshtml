@@ -1,0 +1,38 @@
+@{
+    ViewBag.Title = "Stuffing Bill - Edit log";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <h2 class="page-header">Stuffing Bill - Edit log</h2>
+            <p class="text-muted">View edit history for Stuffing Bill records. You can filter by TRANMID or view all changes.</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="panel panel-default" style="border-color: #e74c3c;">
+                <div class="panel-heading" style="background-color: #e74c3c; color: white;">
+                    <h3 class="panel-title"><i class="fa fa-file-invoice-dollar"></i> Stuffing Bill Edit Log</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Stuffing Bill operations, including field-wise old and new values, who changed it, and when. Values are shown by version.</p>
+                    <form method="get" action="@Url.Action("EditLogStuffingBill", "StuffingBill")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="stuffingbill_tranmid" class="control-label">Filter by TRANMID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="stuffingbill_tranmid" name="tranmid" placeholder="e.g. 100207" />
+                        </div>
+                        <button type="submit" class="btn btn-lg" style="background-color: #e74c3c; color: white; border-color: #c0392b;">
+                            <i class="fa fa-file-invoice-dollar"></i> View Edit Log
+                        </button>
+                    </form>
+                    <hr />
+                    <p><strong>Or</strong> go back to the <a href="@Url.Action("Index", "StuffingBill")">Stuffing Bill Index</a> page.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+

@@ -1,0 +1,750 @@
+@{
+    ViewBag.Title = "Gate In - Edit log Compare";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var gid = 0;
+    if (ViewBag.GIDNO != null)
+    {
+        if (ViewBag.GIDNO is int)
+        {
+            gid = (int)ViewBag.GIDNO;
+        }
+        else
+        {
+            var gidStr = ViewBag.GIDNO.ToString();
+            if (!string.IsNullOrEmpty(gidStr))
+            {
+                int.TryParse(gidStr, out gid);
+            }
+        }
+    }
+    var verA = (string)ViewBag.VersionA;
+    var verB = (string)ViewBag.VersionB;
+    var rowsA = (IEnumerable<scfs_erp.Models.GateInDetailEditLogRow>)ViewBag.RowsA ?? new List<scfs_erp.Models.GateInDetailEditLogRow>();
+    var rowsB = (IEnumerable<scfs_erp.Models.GateInDetailEditLogRow>)ViewBag.RowsB ?? new List<scfs_erp.Models.GateInDetailEditLogRow>();
+    var module = ViewBag.Module as string ?? "ImportGateIn";
+    var controllerName = "ImportGateIn";
+    var actionName = "EditLogGateInCompare";
+    var idParamName = "gidid";
+    
+    if (module == "ExportGateIn")
+    {
+        controllerName = "ExportGateIn";
+    }
+    else if (module == "ImportVehicleTicket")
+    {
+        controllerName = "ImportVehicleTicket";
+        actionName = "EditLogVehicleTicketCompare";
+        idParamName = "vtdid";
+    }
+    else if (module == "ExBondVehicleTicket")
+    {
+        controllerName = "ExBondVehicleTicket";
+        actionName = "EditLogVehicleTicketCompare";
+        idParamName = "vtdid";
+    }
+    else if (module == "BondGateIn")
+    {
+        controllerName = "BondGateIn";
+    }
+    else if (module == "ImportInvoice")
+    {
+        controllerName = "ImportInvoice";
+        actionName = "EditLogInvoiceCompare";
+        idParamName = "tranmid";
+    }
+    else if (module == "ImportManualBill")
+    {
+        controllerName = "ImportManualBill";
+        actionName = "EditLogManualBillCompare";
+        idParamName = "tranmid";
+    }
+    else if (module == "ExportManualBill")
+    {
+        controllerName = "ExportManualBill";
+        actionName = "EditLogExportManualBillCompare";
+        idParamName = "tranmid";
+    }
+    else if (module == "DeliveryOrder")
+    {
+        controllerName = "DeliveryOrder";
+        actionName = "EditLogDeliveryOrderCompare";
+        idParamName = "domid";
+    }
+    else if (module == "Stuffing")
+    {
+        controllerName = "Stuffing";
+        actionName = "EditLogStuffingCompare";
+        idParamName = "stfmid";
+    }
+    else if (module == "StuffingBill")
+    {
+        controllerName = "StuffingBill";
+        actionName = "EditLogStuffingBillCompare";
+        idParamName = "tranmid";
+    }
+    else if (module == "ExBondGateIn")
+    {
+        controllerName = "ImportGateIn";
+        actionName = "EditLogGateInExBondCompare";
+        idParamName = "gidid";
+    }
+    else if (module == "ImportLoadSlip")
+    {
+        controllerName = "ImportLoadSlip";
+        actionName = "EditLogLoadSlipCompare";
+        idParamName = "aslmid";
+    }
+    else if (module == "ImportTruckOut")
+    {
+        controllerName = "ImportTruckOut";
+        actionName = "EditLogTruckOutCompare";
+        idParamName = "godid";
+    }
+
+    // For baseline versions (V0), pick NewValue (the initial state)
+    // For other versions, pick NewValue (the final state after that change)
+    // But also preserve OldValue for comparison purposes
+    Func<scfs_erp.Models.GateInDetailEditLogRow, string> pickVal = r => 
+    {
+        // For baseline versions, NewValue is the initial state
+        if (!string.IsNullOrEmpty(r.NewValue)) return r.NewValue;
+        // Otherwise, use OldValue if NewValue is empty
+        return r.OldValue ?? "";
+    };
+    
+    // Also build dictionaries for OldValue to handle cases where field doesn't exist in V0
+    // but exists in V1 (use V1's OldValue as the baseline)
+    var dictA_Old = rowsA
+        .GroupBy(r => r.FieldName)
+        .ToDictionary(g => g.Key, g => g.Last().OldValue ?? "");
+    var dictB_Old = rowsB
+        .GroupBy(r => r.FieldName)
+        .ToDictionary(g => g.Key, g => g.Last().OldValue ?? "");
+
+    // Map database field names to user-friendly display names
+    var fieldNameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        // Date & Time Fields (controller transforms these, but keep mappings for unmapped fields)
+        {"GIDATE", "In Date"}, {"GITIME", "In Time"}, {"GICCTLDATE", "Port Out Date"}, {"GICCTLTIME", "Port Out Time"},
+        {"IGMDATE", "IGM Date"}, {"BOEDATE", "Bill of Entry Date"},
+        // Reference Numbers (controller transforms these, but keep mappings for unmapped fields)
+        {"GINO", "Gate In No"}, {"GIDNO", "No"}, {"GPREFNO", "Ref No"}, {"IGMNO", "IGM No."},
+        {"COMPYID", "Compyid"}, {"CONTNRID", "contnrid"}, {"GIDID", "gateinid"}, {"SDPTID", "Sdptid"},
+        {"GPLNO", "Line No"}, {"BLNO", "BL No."}, {"BOENO", "Bill of Entry No"}, {"ESBNO", "ESB No"}, {"GPNRNO", "PNR No"},
+        {"EMONO", "IMO No"}, {"EEGMNO", "EGMNO"}, {"EVSLRNO", "Vessel Rotation No"},
+        // Container Details (controller transforms these, but keep mappings for unmapped fields)
+        {"CONTNRNO", "Container No"}, {"CONTNRSID", "Size"}, {"CONTNRTID", "Type"},
+        {"LPSEALNO", "L.seal no"}, {"CSEALNO", "C.seal no"}, {"GIISOCODE", "ISO Code"},
+        // Vehicle Details (controller transforms these, but keep mappings for unmapped fields)
+        {"VHLNO", "Vehicle No"}, {"DRVNAME", "Driver Name"}, {"DRVMBLNO", "Driver Mobile No"},
+        {"DRVLCNO", "Driver License No"}, {"GPWTYPE", "Weightment"}, {"GPSTYPE", "S.Amend / Mismatch"},
+        // Party Details (controller transforms these, but keep mappings for unmapped fields)
+        {"TRNSPRTNAME", "Transpoter Name"}, {"IMPRTNAME", "Importer Name"}, {"STMRNAME", "Steamer Name"},
+        {"CHANAME", "CHA Name"}, {"BCHANAME", "Broker CHA Name"}, {"EXPRTRNAME", "Exporter Name"},
+        {"CLNTNAME", "Client Name"}, {"SHPRNAME", "Shipper Name"},
+        // Vessel Details (controller transforms these, but keep mappings for unmapped fields)
+        {"VSLNAME", "Vessel Name"}, {"VOYNO", "Voyage No"},
+        // Product Details (controller transforms these, but keep mappings for unmapped fields)
+        {"PRDTDESC", "Product Description"}, {"PRDTGID", "Product Category"}, {"PRDTTID", "Product Type"},
+        // Weight & Measurements (controller transforms these, but keep mappings for unmapped fields)
+        {"GPWGHT", "Weight"}, {"GPNOP", "NOP"},
+        // Location Details (controller transforms these, but keep mappings for unmapped fields)
+        {"ROWID", "Row"}, {"SLOTID", "Slot"}, {"STAGID", "Stage"}, {"GDWNID", "Godown"},
+        {"CFSNAME", "CFS Name"},
+        // Other Fields (controller transforms these, but keep mappings for unmapped fields)
+        {"GIREMKRS", "Remarks"}, {"GPETYPE", "SSR/Escort"}, {"GPEAMT", "SSR/Escort Amount"},
+        {"DISPSTATUS", "Status"}, {"GPSCNTYPE", "Scanned"}, {"GPSCNMTYPE", "Scan Type"}, {"GSEALTYPE", "Seal Type"},
+        {"GPPTYPE", "Port"}, {"GIDMGDESC", "Damage"}, {"GPMODEID", "GP Mode"}, {"GPAAMT", "Addtnl. Amount"},
+        {"GRADEID", "Refer(Plug)"}, {"GFCLTYPE", "FCL"},
+        // Additional mappings for controller-transformed field names (map to themselves to preserve form labels)
+        {"In Date", "In Date"}, {"In Time", "In Time"}, // Controller transforms GIDATE/GITIME to "In Date"/"In Time" (form labels)
+        {"Weight", "Weight"}, // Controller transforms GPWGHT to "Weight" (form label)
+        {"Weightment", "Weightment"}, // Controller transforms GPWTYPE to "Weightment" (form label)
+        {"S.Amend / Mismatch", "S.Amend / Mismatch"}, // Controller transforms GPSTYPE to "S.Amend / Mismatch" (form label)
+        {"SSR/Escort", "SSR/Escort"}, // Controller transforms GPETYPE to "SSR/Escort" (form label)
+        {"SSR/Escort Amount", "SSR/Escort Amount"}, // Controller transforms GPEAMT to "SSR/Escort Amount" (form label)
+        {"Port Out Date", "Port Out Date"}, {"Port Out Time", "Port Out Time"}, // Controller transforms GICCTLDATE/GICCTLTIME
+        {"Ref No", "Ref No"}, {"PNR No", "PNR No"}, {"Line No", "Line No"}, // Controller transforms GPREFNO, GPNRNO, GPLNO
+        {"Driver Name", "Driver Name"}, {"Vehicle No", "Vehicle No"}, // Controller transforms DRVNAME, VHLNO
+        {"Transpoter Name", "Transpoter Name"}, {"Other Transpoter Name", "Other Transpoter Name"}, // Controller transforms TRNSPRTNAME, GTRNSPRTNAME
+        {"Vessel Name", "Vessel Name"}, {"Voyage No", "Voyage No"}, // Controller transforms VSLNAME, VOYNO
+        {"IGM No.", "IGM No."}, {"IGM Date", "IGM Date"}, // Controller transforms IGMNO, IGMDATE
+        {"Importer Name", "Importer Name"}, {"Steamer Name", "Steamer Name"}, // Controller transforms IMPRTNAME, STMRNAME
+        {"CHA Name", "CHA Name"}, {"Bill of Entry No", "Bill of Entry No"}, {"Bill of Entry Date", "Bill of Entry Date"}, // Controller transforms CHANAME, BOENO, BOEDATE
+        {"Container No", "Container No"}, {"Size", "Size"}, {"Type", "Type"}, // Controller transforms CONTNRNO, CONTNRSID, CONTNRTID
+        {"ISO Code", "ISO Code"}, {"L.seal no", "L.seal no"}, {"C.seal no", "C.seal no"}, // Controller transforms GIISOCODE, LPSEALNO, CSEALNO
+        {"Row", "Row"}, {"Slot", "Slot"}, // Controller transforms ROWID, SLOTID
+        {"Product Category", "Product Category"}, {"Product Description", "Product Description"}, // Controller transforms PRDTGID, PRDTDESC
+        {"Port", "Port"}, {"BL No.", "BL No."}, {"FCL", "FCL"}, {"Damage", "Damage"}, // Controller transforms GPPTYPE, BLNO, GFCLTYPE, GIDMGDESC
+        {"GP Mode", "GP Mode"}, {"Addtnl. Amount", "Addtnl. Amount"}, {"Scanned", "Scanned"}, {"Scan Type", "Scan Type"}, // Controller transforms GPMODEID, GPAAMT, GPSCNTYPE, GPSCNMTYPE
+        {"Refer(Plug)", "Refer(Plug)"}, {"Exporter Name", "Exporter Name"}, {"Gate In No", "Gate In No"}, {"No", "No"}, // Controller transforms GRADEID, EXPRTRNAME, GINO, GIDNO
+        // ExBond GateIn specific mappings (controller transforms these field names)
+        {"Bond No", "Bond No"}, {"No.of Containers", "No.of Containers"},
+        // Removed duplicate keys: "CHA Name", "Importer Name", "Container Size", "Product Category" already defined above
+        // ExBond fields
+        {"EBNDDNO", "Ex Bond No"}, {"EBNDNO", "No"}, {"EBNDDATE", "Ex Bond Delivery Date"},
+        {"EBNDBENO", "BE No"}, {"EBNDBEDATE", "BE Date"}, {"EBNDNOC", "No.of Containers"},
+        {"EBNDNOP", "NOP"}, {"EBNDSPC", "Space"}, {"EBNDCTYPE", "Bond Type"},
+        {"BNDID", "Bond No"}, {"EBNDEDATE", "Valid Till Date"},
+        // OpenSheet fields
+        {"OSBCHACATEAID", "CHA Address type"}, {"OSBBCHACATEAID", "Billing Address type"},
+        {"OSBCHASTATEID", "State"}, {"OSBBCHASTATEID", "Billing State Code"},
+        // Removed duplicate keys: DISPSTATUS and PRDTGID already defined above
+        // Vehicle Ticket fields (only unique fields - VHLNO, DRVNAME, TRNSPRTNAME already exist above)
+        {"VTDATE", "Date"}, {"VTTIME", "Time"}, {"VTNO", "Ticket No"}, {"VTDNO", "Ticket Detail No"},
+        {"ASLDID", "ASL ID"}, {"VTDESC", "Description"},
+        {"VTQTY", "NOP"}, {"VTTYPE", "Type"}, {"VTSTYPE", "Status Type"}, {"VTREMRKS", "Remarks"},
+        {"VTAREA", "Space"}, {"EBVTNOC", "No.of Containers"},
+        {"EGIDID", "Export Gate In ID"}, {"VTSSEALNO", "Seal No"},
+        // Note: GIDID already mapped above as "gateinid" - removed duplicate
+        {"VTCTYPE", "Container Type"}, {"CGIDID", "Cargo Gate In ID"}, {"STFDID", "Stuffing ID"},
+        {"EVLDATE", "Empty Vehicle Load Date"}, {"EVSDATE", "Empty Vehicle Stuff Date"}, {"ELRDATE", "Empty Load Return Date"},
+        {"GTRNSPRTNAME", "Other Transporter Name"},
+        {"QRCDIMGPATH", "QR Code Image Path"},
+        // Legacy field names (with underscores or suffixes)
+        {"CHA_Name (GID)", "CHA Name"}, {"Broker_CHA_Name", "Broker CHA Name"},
+        {"Transporter_Name", "Transporter Name"}, {"Importer_Name", "Importer Name"},
+        // ImportDeStuff and ImportLoadSlip fields (controllers already apply friendly names, but keep mappings for consistency)
+        // Database field names to friendly names
+        {"ASLMTIME", "Time"}, {"ASLMDATE", "Date"}, {"ASLMNO", "Slip No"}, {"ASLMDNO", "Slip Detail No"},
+        {"ASLMTYPE", "Type"}, // ImportLoadSlip master field
+        {"ASLDTYPE", "Destuff Type"}, {"ASLLTYPE", "Labour Type"}, {"ASLOTYPE", "Operation Type"},
+        // Note: For ImportLoadSlip, controller transforms ASLDTYPE to "Load Type", so this mapping is for ImportDeStuff
+        {"OSDID", "Open Sheet Detail ID"},
+        // Note: LCATEID already mapped below for ImportInvoice, ASLFDESC maps to "Description" which is already mapped
+        {"ASLTDESC", "Type Description"}, {"ASLDODATE", "DO Date"},
+        {"ASEALNO", "Agency Seal No"},
+        // Note: CSEALNO already mapped above as "C.seal no", SLTID already mapped above
+        // Detail fields with "Detail." prefix
+        {"Detail.ASLDTYPE", "Detail - Destuff Type"}, {"Detail.ASLLTYPE", "Detail - Labour Type"},
+        // Note: For ImportLoadSlip, controller transforms Detail.ASLDTYPE to "Detail - Load Type"
+        {"Detail.LCATEID", "Detail - Labour"}, {"Detail.OSDID", "Detail - Open Sheet Detail ID"},
+        {"Detail.ASLFDESC", "Detail - Description"}, {"Detail.ASLTDESC", "Detail - Type Description"},
+        {"Detail.ASLDODATE", "Detail - DO Date"}, {"Detail.CSEALNO", "Detail - CHA Seal No"},
+        {"Detail.ASEALNO", "Detail - Agency Seal No"}, {"Detail.SLTID", "Detail - Slot ID"},
+        // Friendly name mappings (already transformed by controller)
+        {"Slip No", "Slip No"}, {"Slip Detail No", "Slip Detail No"},
+        {"Location Category", "Labour"}, {"Labour", "Labour"},
+        // Removed duplicate key: "Status" already defined above (DISPSTATUS -> "Status")
+        {"Destuff Type", "Destuff Type"}, {"Load Type", "Load Type"}, {"Labour Type", "Labour Type"},
+        // Note: "Type", "Date", "Time" already mapped above for other modules, so not duplicated here
+        {"Open Sheet Detail ID", "Open Sheet Detail ID"},
+        {"Gate In Detail ID", "Gate In Detail ID"}, // Note: "Vehicle No" and "Driver Name" already mapped above
+        // Note: "Description", "Type Description", "DO Date", "CHA Seal No", "Agency Seal No", "Slot ID" already mapped above
+        // OpenSheet fields (controller applies friendly names, but keep mappings as fallback)
+        // Note: BOENO, BOEDATE, GIDATE, CSEALNO, GIDID already exist above, so not duplicated here
+        {"OSMDATE", "Open Sheet Date"}, {"OSMTIME", "Open Sheet Time"}, {"OSMNO", "Open Sheet No"}, {"OSMDNO", "Open Sheet Display No"},
+        {"CHAID", "CHA"}, {"OSMNAME", "CHA(Licence Name)"}, {"OSMCNAME", "CHA Staff Name"}, {"OSMLNAME", "Open Sheet L Name"},
+        {"OSMIGMNO", "IGM No"}, {"OSMVSLNAME", "Vessel Name"},
+        {"OSMTYPE", "Via"}, {"DOTYPE", "DO Liner"},
+        {"DOIDATE", "DO Issue Date"}, {"SCTYPE", "Seal Cut Type"}, {"SCDATE", "Seal Cut Date"}, {"SCTIME", "Seal Cut Time"},
+        {"SCDESC", "Seal No's"}, {"SCREMRKS", "Remarks"}, {"OSMBLNO", "BL No"}, {"OSMBLDATE", "BL Date"},
+        {"OSMIGMDATE", "IGM Date"}, {"OSMLNO", "Line No"},         {"OSMUNITID", "Unit"}, {"OSMLCATEID", "Labour"},
+        {"OSMAAMT", "Assessable Value"}, {"OSMWGHT", "Weight"}, {"OSMNOP", "Nop"},
+        {"OSMTNOC", "Total Number of Containers"}, {"OSMFNOC", "Full Number of Containers"}, {"OSMLDTYPE", "Load Type"},
+        {"OSBILLEDTO", "Billed To"}, {"OSBILLREFNAME", "Billing Name"},
+        {"OSMDUTYAMT", "Duty Amount"}, {"OOCNO", "OOC No"}, {"OOCDATE", "OOC Date"},
+        {"OSBCHACATEAGSTNO", "CHA GST No"}, {"OSBBCHACATEAGSTNO", "Billing GST No"},
+        {"OSBCHAADDR1", "CHA Address 1"}, {"OSBCHAADDR2", "CHA Address 2"},
+        {"OSBCHAADDR3", "CHA Address 3"}, {"OSBCHAADDR4", "CHA Address 4"},
+        {"OSBBCHAADDR1", "Billing Address 1"}, {"OSBBCHAADDR2", "Billing Address 2"},
+        {"OSBBCHAADDR3", "Billing Address 3"}, {"OSBBCHAADDR4", "Billing Address 4"},
+        {"LSEALNO", "Liner Seal No"}, {"SSEALNO", "SANCO Seal No"},
+        {"INSPTYPE", "Inspection Type"}, {"BILLEDID", "Billed ID"},
+        // Detail fields (prefixed with "Detail.")
+        {"Detail.Location Category", "Detail - Labour"}, {"Detail.Labour", "Detail - Labour"}, {"Detail.Destuff Type", "Detail - Destuff Type"},
+        {"Detail.Load Type", "Detail - Load Type"}, {"Detail.Labour Type", "Detail - Labour Type"},
+        {"Detail.Open Sheet Detail ID", "Detail - Open Sheet Detail ID"},
+        {"Detail.Gate In Detail ID", "Detail - Gate In Detail ID"}, {"Detail.Vehicle No", "Detail - Vehicle No"},
+        {"Detail.Driver Name", "Detail - Driver Name"}, {"Detail.Description", "Detail - Description"},
+        {"Detail.Type Description", "Detail - Type Description"}, {"Detail.DO Date", "Detail - DO Date"},
+        {"Detail.CHA Seal No", "Detail - CHA Seal No"}, {"Detail.Agency Seal No", "Detail - Agency Seal No"},
+        {"Detail.Slot ID", "Detail - Slot ID"}, {"Detail.Status", "Detail - Status"},
+        // OpenSheet Detail fields
+        {"Detail.GIDID", "Detail - Gate In Detail ID"}, {"Detail.GIDATE", "Detail - Gate In Date"},
+        {"Detail.LSEALNO", "Detail - Liner Seal No"}, {"Detail.SSEALNO", "Detail - SANCO Seal No"},
+        // Note: Detail.CSEALNO already mapped above as "Detail - CHA Seal No"
+        {"Detail.INSPTYPE", "Detail - Inspection Type"},
+        {"Detail.BILLEDID", "Detail - Billed ID"},
+        // ImportInvoice and ImportManualBill fields
+        {"TRANDATE", "Transaction Date"}, {"TRANTIME", "Transaction Time"}, {"TRANDNO", "Bill Number"}, {"TRANNO", "Transaction No"},
+        {"TRANREFNAME", "CHA"}, {"BANKMID", "Bank"}, {"LCATEID", "Labour"},
+        {"TRANMODE", "Transaction Mode"}, {"TRANMODEDETL", "Mode Detail"}, {"TRANGAMT", "Gross Amount"}, {"TRANNAMT", "Net Amount"},
+        {"TRANROAMT", "Round Off Amount"}, {"TRANREFAMT", "Transaction Amount"}, {"TRANRMKS", "Remarks"},
+        {"TRANCGSTAMT", "C.G.S.T."}, {"TRANSGSTAMT", "S.G.S.T."}, {"TRANIGSTAMT", "I.G.S.T."},
+        {"CATEAID", "Location"}, {"STATEID", "State"}, {"CATEAGSTNO", "GST No"}, {"REGSTRID", "Tax Type"},
+        {"TRANIMPADDR1", "Address1"}, {"TRANIMPADDR2", "Address2"}, {"TRANIMPADDR3", "Address3"}, {"TRANIMPADDR4", "Address4"},
+        // ExportManualBill Detail fields
+        {"Detail.ACHEADID", "Account Head"}, {"Detail.TRANDDESC", "Bill Description"},
+        {"Detail.TRANDREFNO", "HSN Code"}, {"Detail.TRAND_STRG_CGST_EXPRN", "GST %"}, {"Detail.TRANDGAMT", "Amount"},
+        {"PRCSDATE", "Process Date"},
+        {"TRANBTYPE", "Bill Type"}, {"TRANREFNO", "Reference Number"}, {"TRANREFDATE", "Reference Date"},
+        // TRANREFBNAME removed - Reference Bank Name field is no longer displayed
+        {"TRANTALLYCHANAME", "Tally CHA"}, {"TCATEAID", "Tally CHA Location"}, 
+        {"TCATEAGSTNO", "GST NO"}, {"TSTATEID", "Tally State"},
+        // Removed duplicate keys: TRANIMPADDR1-4 already defined above with "Address1-4"
+        // ImportInvoice additional fields
+        {"TRANFAMT", "Fuel"}, {"TRANADONAMT", "Add on"},
+        {"TARIFFGID", "Tariff Group"}, {"TARIFFMID", "Tariff"}, {"TRANOTYPE", "Operation"},
+        {"TRANVDATE", "Validity Date"}, {"TRANDPNO", "Duty Paid No."}, {"TRANDSAMT", "Storage(Calc)"},
+        {"TRANCFID", "costfactor details"},
+        // DeliveryOrder fields
+        {"DODATE", "DO Date"}, {"DOTIME", "DO Time"}, {"DODNO", "DO Number"}, {"DONO", "DO No"},
+        {"DOREFID", "DO CHA"}, {"DOREFNAME", "DO CHA"},
+        {"DOREFAMT", "DO Amount"}, {"DOMODE", "DO Mode"}, {"DOREFNO", "DO Reference Number"}, {"DOREFDATE", "DO Reference Date"}, {"DOREFBNAME", "DO Bank"},
+        // Removed duplicate keys: TARIFFMID, TARIFFGID, TRANDPNO, TRANVDATE already defined above
+        // Stuffing fields
+        {"STFMID", "Primary"}, {"STFMDATE", "Stuffing Date"}, {"STFMTIME", "Stuffing Time"}, {"STFMNO", "Stuffing No"}, {"STFMDNO", "Stuffing Detail No"},
+        // Removed duplicate key: CHAID already defined above
+        {"EOPTID", "Operation Type"}, {"STFBILLEDTO", "Billed To"}, {"STFBILLREFNAME", "Billing Name"},
+        {"STFCATEAID", "CHA Location"},
+        // Removed duplicate keys: STATEID, CATEAGSTNO, TRANIMPADDR1-4 already defined above
+        {"STFBCATEAID", "Billing Location"}, {"STFBCHASTATEID", "Billing State"}, {"STFBCHAGSTNO", "Billing GST No"},
+        {"STFBCHAADDR1", "Billing Address 1"}, {"STFBCHAADDR2", "Billing Address 2"}, {"STFBCHAADDR3", "Billing Address 3"}, {"STFBCHAADDR4", "Billing Address 4"},
+        {"STF_SBILL_RNO", "Shipping Bill No"}, {"STF_FORM13_RNO", "Form 13 No"}
+    };
+    
+    // Fields to always display (even if they're the same)
+    var alwaysDisplayFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "Compyid", "COMPYID",
+        "contnrid", "CONTNRID",
+        "Gate In No", "GINO",
+        "gateinid", "GIDID",
+        "No", "GIDNO",
+        "Port Out Date", "GICCTLDATE",
+        "Port Out Time", "GICCTLTIME",
+        "Sdptid", "SDPTID",
+        "Status", "DISPSTATUS",
+        "S.Amend / Mismatch", "GPSTYPE", "Status type",
+        "Weight", "GPWGHT"
+    };
+    
+    // Fields to exclude from display
+    var excludedFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "Valid Till Date", "EBNDEDATE", // ExBond GateIn - exclude Valid Till Date
+        "LCATEID", "LCATENAME", "STFMNAME", "STFBILLREFID", // Stuffing - exclude Labour details and duplicate CHA/Billing names
+        "Open Sheet L Name", "OSMLNAME", // OpenSheet - exclude Open Sheet L Name
+        "Inspection Type", "INSPTYPE", "Detail.Inspection Type", "Detail.INSPTYPE", // OpenSheet - exclude Inspection Type
+        "Handling Taxable Amount", "HANDL_TAXABLE_AMT", // ImportInvoice - exclude Handling Taxable Amount
+        "Pulse Storage Type", "TRAN_PULSE_STRG_TYPE", // ImportInvoice - exclude Pulse Storage Type
+        // ExportManualBill - exclude removed fields
+        "TRANREFID", "CHA", // ExportManualBill - exclude CHA ID (show name only)
+        "TRANAMTWRDS", "Amount in Words", // ExportManualBill - exclude Amount in Words
+        "TRANLMDATE", "Lorry Memo Date", // ExportManualBill - exclude Lorry Memo Date
+        "TRANLSDATE", "Lorry Slip Date", // ExportManualBill - exclude Lorry Slip Date
+        "HANDL_SGST_AMT", "HANDL_CGST_AMT", "HANDL_SGST_EXPRN", "HANDL_CGST_EXPRN", "HANDL_IGST_EXPRN", "HANDL_IGST_AMT", // ExportManualBill - exclude Handling GST fields
+        "STRG_IGST_AMT", "STRG_IGST_EXPRN", // ExportManualBill - exclude Storage IGST fields
+        "HANDL_TAXABLE_AMT", "STRG_TAXABLE_AMT", "HANDL_HSNCODE", "STRG_HSNCODE", // ExportManualBill - exclude Taxable Amount and HSN Code
+        "Handling SGST Amount", "Handling CGST Amount", "Handling SGST %", "Handling CGST %", "Handling IGST %", "Handling IGST Amount", // ExportManualBill - exclude friendly names
+        "Storage IGST Amount", "Storage IGST %", "Handling Taxable Amount", "Storage Taxable Amount", "Handling HSN Code", "Storage HSN Code", // ExportManualBill - exclude friendly names
+        // StuffingBill - exclude removed fields
+        "TRANHAMT", "Handling Amount", "TRANLMDATE", "TRANLSDATE", "TRANNARTN", "Narration", "TRANREFBNAME", "Bank" // StuffingBill - exclude Handling Amount, Lorry dates, Narration, and duplicate Bank
+    };
+    
+    Func<string, string> getFriendlyName = fieldName => 
+    {
+        if (string.IsNullOrEmpty(fieldName)) return fieldName;
+        
+        // Handle "Detail." prefixed fields - check both with and without prefix
+        bool hasDetailPrefix = fieldName.StartsWith("Detail.", StringComparison.OrdinalIgnoreCase);
+        string fieldWithoutDetail = hasDetailPrefix ? fieldName.Substring(7) : fieldName;
+        
+        // First, check if the full field name (with or without Detail.) is in the map
+        if (fieldNameMap.ContainsKey(fieldName)) 
+            return fieldNameMap[fieldName];
+        
+        // If it has Detail prefix, check if the field without prefix is in the map
+        if (hasDetailPrefix && fieldNameMap.ContainsKey(fieldWithoutDetail))
+        {
+            var baseFriendly = fieldNameMap[fieldWithoutDetail];
+            // Check if there's a specific Detail mapping
+            var detailKey = "Detail." + fieldWithoutDetail;
+            if (fieldNameMap.ContainsKey(detailKey))
+                return fieldNameMap[detailKey];
+            // Otherwise, prefix the base friendly name with "Detail - "
+            return "Detail - " + baseFriendly;
+        }
+        
+        // Controller already transforms field names to friendly names (like "In Date", "Container No", etc.)
+        // So if it's already a friendly name (contains spaces, not all caps/underscores), return as-is
+        if (fieldName.Contains(" ") && !fieldName.All(c => char.IsUpper(c) || char.IsDigit(c) || c == '_'))
+        {
+            // It's already a friendly name from controller, but check if we have a mapping for it
+            if (fieldNameMap.ContainsKey(fieldName))
+                return fieldNameMap[fieldName];
+            return fieldName;
+        }
+        
+        // If it's a database field name (all caps, possibly with underscores), look it up in the map
+        if (fieldNameMap.ContainsKey(fieldWithoutDetail))
+        {
+            var friendly = fieldNameMap[fieldWithoutDetail];
+            if (hasDetailPrefix)
+            {
+                // Check if there's a specific Detail mapping
+                var detailKey = "Detail." + fieldWithoutDetail;
+                if (fieldNameMap.ContainsKey(detailKey))
+                    return fieldNameMap[detailKey];
+                return "Detail - " + friendly;
+            }
+            return friendly;
+        }
+        
+        // Try to clean up field name by removing underscores and suffixes
+        var cleaned = fieldWithoutDetail.Replace("_", " ").Replace(" (GID)", "").Trim();
+        if (hasDetailPrefix)
+            return "Detail - " + cleaned;
+        return cleaned;
+    };
+
+    // Build dictionaries keyed by field name for both versions
+    var dictA = rowsA
+        .GroupBy(r => r.FieldName)
+        .ToDictionary(g => g.Key, g => pickVal(g.Last()));
+    var dictB = rowsB
+        .GroupBy(r => r.FieldName)
+        .ToDictionary(g => g.Key, g => pickVal(g.Last()));
+
+    // Debug output (remove after testing)
+    System.Diagnostics.Debug.WriteLine(string.Format("EditLogGateInCompare View: rowsA count={0}, rowsB count={1}", rowsA.Count(), rowsB.Count()));
+    System.Diagnostics.Debug.WriteLine(string.Format("EditLogGateInCompare View: dictA keys={0}, dictB keys={1}", dictA.Keys.Count(), dictB.Keys.Count()));
+    if (dictA.Keys.Count() > 0)
+    {
+        var firstKeyA = dictA.Keys.First();
+        System.Diagnostics.Debug.WriteLine(string.Format("EditLogGateInCompare View: First dictA key={0}, value={1}", firstKeyA, dictA[firstKeyA]));
+    }
+    if (dictB.Keys.Count() > 0)
+    {
+        var firstKeyB = dictB.Keys.First();
+        System.Diagnostics.Debug.WriteLine(string.Format("EditLogGateInCompare View: First dictB key={0}, value={1}", firstKeyB, dictB[firstKeyB]));
+    }
+
+    // Show ALL fields from both versions (Union instead of Intersect)
+    var allFields = dictA.Keys.Union(dictB.Keys).OrderBy(k => k).ToList();
+    System.Diagnostics.Debug.WriteLine(string.Format("EditLogGateInCompare View: allFields count={0}", allFields.Count()));
+}
+
+<style>
+    .diff-yes { background: #fff3cd; }
+    .diff-no { background: #e8f5e9; }
+    .new-field { background: #d9edf7; border-left: 4px solid #31708f; }
+    .sticky th { position: sticky; top: 0; background: #2e3e4e; color: #fff; z-index: 2; }
+    .nowrap { white-space: nowrap; }
+    .filterbar { margin: 10px 0; }
+    .old-badge { background: #f2dede; color: #a94442; border-radius: 3px; padding: 2px 6px; display: inline-block; }
+    .new-badge { background: #dff0d8; color: #3c763d; border-radius: 3px; padding: 2px 6px; display: inline-block; }
+    .empty-value { color: #999; font-style: italic; }
+</style>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <h2 class="page-header">@(module == "ImportVehicleTicket" ? "Vehicle Ticket" : module == "ExBondVehicleTicket" ? "ExBond Vehicle Ticket" : module == "ExportGateIn" ? "Export Gate In" : module == "BondGateIn" ? "Bond Gate In" : module == "ImportInvoice" ? "Import Invoice" : module == "ImportManualBill" ? "Import Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "ImportLoadSlip" ? "Import Load Slip" : module == "ImportTruckOut" ? "Import Truck Out" : "Gate In") - Version Compare</h2>
+            <p class="text-muted">
+                Comparing <strong>@(module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "Vehicle Ticket" : module == "ImportInvoice" ? "Invoice" : module == "ImportManualBill" ? "Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "ImportLoadSlip" ? "Load Slip" : module == "ImportTruckOut" ? "Truck Out" : "GateIn") Number</strong> <code>@gid</code> between <strong>Version A</strong> <code>@verA</code> and <strong>Version B</strong> <code>@verB</code>.
+                <br/>
+                <span id="changedCount" style="color: #31708f; font-weight: bold;"></span>
+            </p>
+            <div class="btn-group">
+                <a class="btn btn-default" href="@Url.Action(module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "EditLogVehicleTicket" : module == "ImportInvoice" ? "EditLogInvoice" : module == "ImportManualBill" ? "EditLogManualBill" : module == "ExportManualBill" ? "EditLogExportManualBill" : module == "DeliveryOrder" ? "EditLogDeliveryOrder" : module == "Stuffing" ? "EditLogStuffing" : module == "StuffingBill" ? "EditLogStuffingBill" : module == "ImportLoadSlip" ? "EditLogLoadSlip" : module == "ImportTruckOut" ? "EditLogTruckOut" : "EditLogGateIn", controllerName, new { gidid = (module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" || module == "ImportInvoice" || module == "ImportManualBill" || module == "ExportManualBill" || module == "DeliveryOrder" || module == "Stuffing" || module == "StuffingBill" || module == "ImportLoadSlip" || module == "ImportTruckOut") ? (object)null : gid, vtdid = (module == "ImportVehicleTicket" || module == "ExBondVehicleTicket") ? gid : (object)null, tranmid = (module == "ImportInvoice" || module == "ImportManualBill" || module == "ExportManualBill" || module == "StuffingBill") ? gid : (object)null, domid = module == "DeliveryOrder" ? gid : (object)null, stfmid = module == "Stuffing" ? gid : (object)null, aslmid = module == "ImportLoadSlip" ? gid : (object)null, godid = module == "ImportTruckOut" ? gid : (object)null })"><i class="fa fa-arrow-left"></i> Back to Log</a>
+            </div>
+            <div class="filterbar">
+                <label>Filter field:</label>
+                <input type="text" id="fltField" class="form-control input-sm" style="display:inline-block; width:220px;" placeholder="Type to filter fields..." />
+            </div>
+            <div class="alert alert-info" style="margin-top: 10px;">
+                <strong>Note:</strong> Showing <strong>fields that exist in at least one version AND are different</strong>. Fields that are the same or both empty are hidden.
+                <span style="background: #fff3cd; padding: 2px 8px; margin: 0 10px; border-radius: 3px;">Yellow = Changed Field</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="table-responsive">
+                <table id="cmpTable" class="table table-bordered table-striped sticky">
+                    <thead>
+                        <tr>
+                            <th class="nowrap">Field</th>
+                            <th class="nowrap">Old Value (Version @verA)</th>
+                            <th class="nowrap">New Value (Version @verB)</th>
+                        </tr>
+                        <tr>
+                            <th><input type="text" id="fltField2" class="form-control input-sm" placeholder="Field" /></th>
+                            <th><input type="text" id="fltOld" class="form-control input-sm" placeholder="Old value" /></th>
+                            <th><input type="text" id="fltNew" class="form-control input-sm" placeholder="New value" /></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @{
+                        var changedFieldsCount = 0;
+                    }
+                    @if (allFields.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="3" class="text-center text-muted">No fields found</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var f in allFields)
+                        {
+                            // Filter out excluded fields
+                            var fieldName = f ?? string.Empty;
+                            var friendlyFieldName = getFriendlyName(fieldName);
+                            if (excludedFields.Contains(fieldName) || excludedFields.Contains(friendlyFieldName))
+                            {
+                                continue;
+                            }
+                            
+                            // Get the final state value for each version
+                            var va = dictA.ContainsKey(f) ? dictA[f] : "";
+                            var vb = dictB.ContainsKey(f) ? dictB[f] : "";
+                            
+                            // For the "Old Value" column (Version A), use V0's value (baseline)
+                            // If V0 doesn't have the field but V1 does, use V1's OldValue (what it was before V1's change)
+                            var valA = va;
+                            if (string.IsNullOrEmpty(valA) && dictB.ContainsKey(f))
+                            {
+                                // Field doesn't exist in V0 but exists in V1
+                                // Use V1's OldValue as the baseline (what it was before V1's change)
+                                valA = dictB_Old.ContainsKey(f) ? dictB_Old[f] : "";
+                            }
+                            
+                            // For the "New Value" column (Version B), use V1's final state
+                            var valB = vb;
+                            
+                            // Special handling: If V1 has a change record (exists in dictB), and V0's value equals V1's NewValue,
+                            // then the actual change is from V1's OldValue to V1's NewValue, not from V0 to V1
+                            // So use V1's OldValue as valA to show the actual change
+                            if (dictB.ContainsKey(f) && dictB_Old.ContainsKey(f) && !string.IsNullOrEmpty(dictB_Old[f]))
+                            {
+                                // V1 has this field with a change record
+                                // If V0's final state equals V1's final state, use V1's OldValue to show the change
+                                if (va == vb || string.IsNullOrEmpty(va))
+                                {
+                                    valA = dictB_Old[f];
+                                }
+                            }
+                            
+                            // Normalize "NULL" string and other empty representations to empty
+                            if (valA != null)
+                            {
+                                valA = valA.Trim();
+                                if (valA.Equals("NULL", StringComparison.OrdinalIgnoreCase) || 
+                                    valA == "-" || 
+                                    valA == "(not set)" || 
+                                    valA.Equals("null", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    valA = "";
+                                }
+                            }
+                            if (valB != null)
+                            {
+                                valB = valB.Trim();
+                                if (valB.Equals("NULL", StringComparison.OrdinalIgnoreCase) || 
+                                    valB == "-" || 
+                                    valB == "(not set)" || 
+                                    valB.Equals("null", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    valB = "";
+                                }
+                            }
+                            
+                            // Normalize empty strings
+                            valA = string.IsNullOrEmpty(valA) ? "" : valA;
+                            valB = string.IsNullOrEmpty(valB) ? "" : valB;
+                            
+                            // Debug output for first few fields (remove after testing)
+                            if (changedFieldsCount < 5)
+                            {
+                                System.Diagnostics.Debug.WriteLine(string.Format("EditLogGateInCompare View: Field={0}, valA={1}, valB={2}, dictA has key={3}, dictB has key={4}", 
+                                    f, valA ?? "(null)", valB ?? "(null)", dictA.ContainsKey(f), dictB.ContainsKey(f)));
+                            }
+                            
+                            // Skip Operation Type field (ASLOTYPE) - removed from display
+                            if (f != null && (f.Equals("Operation Type", StringComparison.OrdinalIgnoreCase) || 
+                                f.Equals("ASLOTYPE", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Detail.ASLOTYPE", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Detail.Operation Type", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                continue;
+                            }
+                            
+                            // Skip EHI Date and EHI Time fields - removed from display
+                            if (f != null && (f.Equals("EHIDATE", StringComparison.OrdinalIgnoreCase) || 
+                                f.Equals("EHITIME", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("EHI Date", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("EHI Time", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                continue;
+                            }
+                            
+                            // Skip Import Invoice removed fields
+                            if (module == "ImportInvoice" && f != null && (
+                                f.Equals("TRANREFBNAME", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("TRANAMTWRDS", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("TRANLMDATE", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("TRANLSDATE", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("TRANNARTN", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("HANDL_CGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("HANDL_SGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("HANDL_IGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Reference Bank Name", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Amount in Words", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Lorry Memo Date", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Lorry Slip Date", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Narration", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Handling CGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Handling SGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Handling IGST Amount", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                continue;
+                            }
+                            
+                            // Skip Import Manual Bill removed fields
+                            if (module == "ImportManualBill" && f != null && (
+                                f.Equals("TRANREFID", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("TRANREFBNAME", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("TRANAMTWRDS", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("TRANLMDATE", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("TRANLSDATE", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("HANDL_SGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("HANDL_CGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("HANDL_SGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("HANDL_CGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("STRG_CGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("STRG_SGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("STRG_SGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("STRG_CGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("HANDL_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("STRG_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("HANDL_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("STRG_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("CHA", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Bank", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Amount in Words", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Lorry Memo Date", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Lorry Slip Date", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Handling SGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Handling CGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Handling SGST %", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Handling CGST %", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Storage CGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Storage SGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Storage SGST %", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Storage CGST %", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Handling Taxable Amount", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Storage Taxable Amount", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Handling HSN Code", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Storage HSN Code", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                continue;
+                            }
+                            
+                            // Normalize empty strings for comparison
+                            valA = string.IsNullOrEmpty(valA) ? "" : valA;
+                            valB = string.IsNullOrEmpty(valB) ? "" : valB;
+                            
+                            // Check if values are different
+                            bool diff = valA != valB;
+                            
+                            // Check if this field should always be displayed
+                            bool shouldAlwaysDisplay = alwaysDisplayFields.Contains(f) || alwaysDisplayFields.Contains(friendlyFieldName);
+                            
+                            // Show fields if:
+                            // 1. They should always be displayed, OR
+                            // 2. They exist in at least one version (not both empty) AND they are different
+                            bool bothEmpty = string.IsNullOrEmpty(valA) && string.IsNullOrEmpty(valB);
+                            if (!shouldAlwaysDisplay && (bothEmpty || !diff))
+                            {
+                                continue;
+                            }
+                            
+                            changedFieldsCount++;
+                            var rowClass = diff ? "diff-yes" : "new-field";
+                            
+                            <tr class="row-item @rowClass" data-field="@f">
+                                <td class="field-name">@friendlyFieldName</td>
+                                <td>
+                                    @if (string.IsNullOrEmpty(valA))
+                                    {
+                                        <span class="empty-value">(not set)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="old-badge">@Html.Raw(HttpUtility.HtmlEncode(valA))</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (string.IsNullOrEmpty(valB))
+                                    {
+                                        <span class="empty-value">(not set)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="new-badge">@Html.Raw(HttpUtility.HtmlEncode(valB))</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                    @if (changedFieldsCount == 0 && allFields.Count > 0)
+                    {
+                        <tr>
+                            <td colspan="3" class="text-center text-muted">
+                                <i class="fa fa-info-circle"></i> No changes found between these versions
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section scripts{
+<script>
+    (function(){
+        // Count and display changed fields
+        var totalChanged = $('#cmpTable tbody tr.row-item').length;
+        if (totalChanged > 0) {
+            $('#changedCount').text('Total ' + totalChanged + ' field(s) changed');
+        }
+        
+        function applyFilters(){
+            var q = ($('#fltField').val() || '').toLowerCase();
+            var q2 = ($('#fltField2').val() || '').toLowerCase();
+            var qo = ($('#fltOld').val() || '').toLowerCase();
+            var qn = ($('#fltNew').val() || '').toLowerCase();
+            var visibleCount = 0;
+            $('#cmpTable tbody tr').each(function(){
+                var $tr = $(this);
+                var fname = ($tr.data('field') + '').toLowerCase();
+                var textOld = ($tr.find('td:nth-child(2)').text() || '').toLowerCase();
+                var textNew = ($tr.find('td:nth-child(3)').text() || '').toLowerCase();
+                var matchField = (!q && !q2) || fname.indexOf(q) !== -1 || fname.indexOf(q2) !== -1;
+                var matchOld = !qo || textOld.indexOf(qo) !== -1;
+                var matchNew = !qn || textNew.indexOf(qn) !== -1;
+                var match = matchField && matchOld && matchNew;
+                $tr.toggle(match);
+                if (match && $tr.hasClass('row-item')) visibleCount++;
+            });
+            
+            // Update count based on filter
+            if (q || q2 || qo || qn) {
+                $('#changedCount').text('Showing ' + visibleCount + ' of ' + totalChanged + ' changed field(s)');
+            } else {
+                $('#changedCount').text('Total ' + totalChanged + ' field(s) changed');
+            }
+        }
+        $('#fltField').on('keyup change', applyFilters);
+        $('#fltField2').on('keyup change', applyFilters);
+        $('#fltOld').on('keyup change', applyFilters);
+        $('#fltNew').on('keyup change', applyFilters);
+    })();
+</script>
+}

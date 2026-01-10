@@ -1,0 +1,36 @@
+@{
+    ViewBag.Title = "Bond Gate In - Edit log";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <h2 class="page-header">Bond Gate In - Edit log</h2>
+            <p class="text-muted">View changes captured in <strong>GateInDetailEditLog</strong> for Bond Gate In operations, including field-wise old and new values, who changed it, and when.</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-info">
+                <div class="panel-heading">
+                    <h3 class="panel-title"><i class="fa fa-lock"></i> Bond Gate In</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View edit history for Bond Gate In records. Filter by GIDID, date range, user, field name, or version.</p>
+                    <form method="get" action="@Url.Action("EditLogGateIn", "BondGateIn")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="gidid" class="control-label">Filter by GIDID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="gidid" name="gidid" placeholder="e.g. 12345" />
+                        </div>
+                        <button type="submit" class="btn btn-info btn-lg">
+                            <i class="fa fa-lock"></i> View Bond GateIn Log
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+

@@ -1,0 +1,358 @@
+@model IEnumerable<scfs_erp.Models.GateInDetailEditLogRow>
+@{
+    ViewBag.Title = "Seal - Edit log";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    
+    // Determine module and controller from ViewBag or Request
+    var module = ViewBag.Module as string ?? "Seal";
+    var controllerName = "Seal";
+    var idParamName = "stfmid";
+    var idParamValue = Request["stfmid"];
+    
+    // Map database field names to user-friendly display names
+    var fieldNameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        {"STFMDATE", "Date"}, {"STFMTIME", "Time"}, {"STFMNO", "No"}, {"STFMDNO", "Seal Number"},
+        {"STFMNAME", "CHA Name"}, {"EOPTID", "Operation Type"}, {"STFBILLEDTO", "Billed To"},
+        {"STFBILLREFID", "Billing Name"}, {"STFBILLREFNAME", "Billing Name"},
+        {"STFCATEAID", "CHA Location"}, {"STATEID", "State"}, {"CATEAGSTNO", "GST NO"},
+        {"TRANIMPADDR1", "Address 1"}, {"TRANIMPADDR2", "Address 2"}, {"TRANIMPADDR3", "Address 3"}, {"TRANIMPADDR4", "Address 4"},
+        {"STFBCATEAID", "Billing Location"}, {"STFBCHASTATEID", "State"}, {"STFBCHAGSTNO", "GST NO"},
+        {"STFBCHAADDR1", "Address 1"}, {"STFBCHAADDR2", "Address 2"}, {"STFBCHAADDR3", "Address 3"}, {"STFBCHAADDR4", "Address 4"},
+        {"STF_SBILL_RNO", "Shipping Bill No"}, {"STF_FORM13_RNO", "Form 13 No"}
+    };
+    
+    Func<string, string> getFriendlyName = fieldName => 
+    {
+        // If the field name is already friendly (from controller mapping), return as-is
+        if (fieldNameMap.ContainsKey(fieldName)) return fieldNameMap[fieldName];
+        // If it's already a friendly name (contains spaces, not all caps), return as-is
+        if (!string.IsNullOrEmpty(fieldName) && fieldName.Contains(" ") && !fieldName.All(c => char.IsUpper(c) || char.IsDigit(c) || c == '_'))
+            return fieldName;
+        // Try to clean up field name by removing underscores and suffixes
+        var cleaned = fieldName.Replace("_", " ").Replace(" (GID)", "").Trim();
+        return cleaned;
+    };
+}
+
+<link href="~/Content/dataTables.bootstrap.css" rel="stylesheet" />
+<style>
+    /* Sticky table header for better visibility */
+    #logTable thead th { position: sticky; top: 0; background: #2e3e4e; color: #fff; z-index: 2; }
+    #logTable thead input, #logTable thead select { width: 100%; font-size: 12px; padding: 2px 6px; }
+    .old-badge { background: #f2dede; color: #a94442; border-radius: 3px; padding: 2px 6px; display: inline-block; }
+    .new-badge { background: #dff0d8; color: #3c763d; border-radius: 3px; padding: 2px 6px; display: inline-block; }
+    .field-label { font-weight: 600; }
+    .toolbar { margin: 10px 0; }
+    .toolbar .form-control { display: inline-block; width: auto; min-width: 180px; }
+    .group-header { background: #eef5ff; font-weight: bold; }
+    .nowrap { white-space: nowrap; }
+    .w-150 { min-width:150px; }
+    .w-220 { min-width:220px; }
+    .muted { color:#777; font-size:12px; }
+    .legend span { margin-right: 10px; }
+    .legend .old-badge, .legend .new-badge { padding: 3px 8px; }
+    td.details-control { cursor: pointer; text-align: center; width: 34px; }
+    td.details-control .toggle { display:inline-block; width:18px; height:18px; line-height:16px; border-radius:9px; background:#2e86de; color:#fff; font-weight:bold; }
+    tr.shown td.details-control .toggle { background:#c0392b; }
+    .filter-group { display:inline-block; margin-left:10px; }
+</style>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <h2 class="page-header">Seal - Edit log</h2>
+        </div>
+    </div>
+
+    <div class="row" style="margin-top:5px;">
+        <div class="col-md-12">
+            <div class="box">
+                <div class="box-header">
+                    <div class="box-name">
+                        <i class="fa fa-history"></i>
+                        <span>Edit Log Entries</span>
+                    </div>
+                </div>
+                <div class="box-content">
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            <strong>Log Entries</strong>
+                            <span class="muted"> – Click a column header to sort. Use the second header row to filter specific columns.</span>
+                        </div>
+                        <div class="panel-body">
+                    @if (TempData["Err"] != null)
+                    {
+                        <div class="alert alert-danger">@TempData["Err"]</div>
+                    }
+                    <div class="toolbar">
+                        @* Compare form (GET) *@
+                        <form class="form-inline" method="get" action="@Url.Action("EditLogSealCompare", controllerName)" style="margin-top:8px;">
+                            <div class="form-group">
+                                <label for="cmpStfmidCompare">Compare Versions for Seal Number</label>
+                            </div>
+                            <div class="form-group">
+                                <input type="number" id="cmpStfmidCompare" name="@idParamName" class="form-control input-sm" placeholder="Enter Seal Number" value="@idParamValue" required />
+                            </div>
+                            <div class="form-group">
+                                <label for="cmpA">Version A</label>
+                                <input type="text" id="cmpA" name="versionA" class="form-control input-sm" placeholder="e.g. 1" required />
+                            </div>
+                            <div class="form-group">
+                                <label for="cmpB">Version B</label>
+                                <input type="text" id="cmpB" name="versionB" class="form-control input-sm" placeholder="e.g. 2" required />
+                            </div>
+                            <div class="form-group">
+                                <button id="goCompare" type="submit" class="btn btn-info btn-sm"><i class="fa fa-exchange"></i> Compare</button>
+                            </div>
+                            <div class="legend pull-right">
+                                <span><span class="old-badge">Old</span></span>
+                                <span><span class="new-badge">New</span></span>
+                            </div>
+                        </form>
+                    </div>
+                    @if (Model != null && Model.Any())
+                    {
+                        var hasNonBaseline = Model.Any(row => {
+                            var vraw = (row.Version ?? string.Empty).Trim();
+                            return !string.IsNullOrEmpty(vraw) && vraw != "0" && !vraw.Equals("V0", StringComparison.OrdinalIgnoreCase) && !vraw.StartsWith("v0-", StringComparison.OrdinalIgnoreCase) && !vraw.StartsWith("V0-", StringComparison.OrdinalIgnoreCase);
+                        });
+                        
+                        if (hasNonBaseline)
+                        {
+                            <div class="table-responsive">
+                                <table id="logTable" class="table table-striped table-bordered table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th></th>
+                                            <th class="nowrap w-150">Changed On</th>
+                                            <th class="nowrap">Seal Number</th>
+                                            <th class="nowrap">Version</th>
+                                            <th class="w-220">Field</th>
+                                            <th class="w-220">Old Value</th>
+                                            <th class="w-220">New Value</th>
+                                            <th class="nowrap">Changed By</th>
+                                            <th class="nowrap">Module</th>
+                                        </tr>
+                                        <!-- per-column filters -->
+                                        <tr>
+                                            <th></th>
+                                            <th><input type="text" placeholder="Search date/time" class="form-control input-sm" /></th>
+                                            <th><input type="text" placeholder="Seal Number" class="form-control input-sm" /></th>
+                                            <th><input type="text" placeholder="Version" class="form-control input-sm" /></th>
+                                            <th><input type="text" placeholder="Field" class="form-control input-sm" /></th>
+                                            <th><input type="text" placeholder="Old value" class="form-control input-sm" /></th>
+                                            <th><input type="text" placeholder="New value" class="form-control input-sm" /></th>
+                                            <th><input type="text" placeholder="User" class="form-control input-sm" /></th>
+                                            <th><input type="text" placeholder="Module" class="form-control input-sm" /></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var row in Model)
+                                        {
+                                            var vraw = (row.Version ?? string.Empty).Trim();
+                                            var isBaseline = string.IsNullOrEmpty(vraw) || vraw == "0" || vraw.Equals("V0", StringComparison.OrdinalIgnoreCase) || vraw.StartsWith("v0-", StringComparison.OrdinalIgnoreCase) || vraw.StartsWith("V0-", StringComparison.OrdinalIgnoreCase);
+                                            if (isBaseline) { continue; }
+                                            
+                                            // Only show rows where values actually changed (old != new)
+                                            // Normalize values: handle null, empty, whitespace, and common "empty" representations
+                                            var oldVal = row.OldValue ?? string.Empty;
+                                            var newVal = row.NewValue ?? string.Empty;
+                                            
+                                            // Trim and normalize empty representations
+                                            oldVal = oldVal.Trim();
+                                            newVal = newVal.Trim();
+                                            
+                                            // Treat common "empty" values as equivalent
+                                            var oldIsEmpty = string.IsNullOrEmpty(oldVal) || oldVal == "-" || oldVal == "0" || oldVal == "0.0" || oldVal == "0.00" || oldVal == "0.000" || oldVal == "0.0000" || oldVal == "(not set)" || oldVal == "null" || oldVal == "NULL";
+                                            var newIsEmpty = string.IsNullOrEmpty(newVal) || newVal == "-" || newVal == "0" || newVal == "0.0" || newVal == "0.00" || newVal == "0.000" || newVal == "0.0000" || newVal == "(not set)" || newVal == "null" || newVal == "NULL";
+                                            
+                                            // If both are empty/equivalent, skip this row
+                                            if (oldIsEmpty && newIsEmpty)
+                                            {
+                                                continue;
+                                            }
+                                            
+                                            // Compare values (case-insensitive, but preserve case in display)
+                                            if (string.Equals(oldVal, newVal, StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                continue; // Skip rows where old and new values are the same
+                                            }
+                                            
+                                            <tr>
+                                                <td class="details-control"><span class="toggle">+</span></td>
+                                                <td class="nowrap">@row.ChangedOn.ToString("dd-MMM-yyyy HH:mm:ss")</td>
+                                                <td class="nowrap">@row.GIDNO</td>
+                                                <td class="nowrap">@vraw</td>
+                                                <td class="field-label">@getFriendlyName(row.FieldName)</td>
+                                                <td>
+                                                    @if (oldIsEmpty)
+                                                    {
+                                                        <span class="old-badge" style="color: #999; font-style: italic;">(empty)</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="old-badge">@Html.Raw(HttpUtility.HtmlEncode(oldVal))</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (newIsEmpty)
+                                                    {
+                                                        <span class="new-badge" style="color: #999; font-style: italic;">(empty)</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="new-badge">@Html.Raw(HttpUtility.HtmlEncode(newVal))</span>
+                                                    }
+                                                </td>
+                                                <td class="nowrap">@row.ChangedBy</td>
+                                                <td class="nowrap">@row.Modules</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-info">
+                                <i class="fa fa-info-circle"></i> No edit log entries found. Changes will appear here once records are modified.
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="alert alert-info">
+                            <i class="fa fa-info-circle"></i> No edit log entries found. Changes will appear here once records are modified.
+                        </div>
+                    }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section scripts{
+    <script src="~/Scripts/datatables/jquery.dataTables.js"></script>
+    <script src="~/Scripts/datatables/dataTables.bootstrap.js"></script>
+    <script>
+        $(function () {
+            // Set dynamic label for Seal
+            var numberLabel = 'Seal Number';
+            
+            // No server-side toolbar filters
+            var table = $('#logTable').DataTable({
+                order: [[2, 'desc'], [3, 'desc'], [1, 'desc']],
+                pageLength: 50,
+                lengthMenu: [10, 25, 50, 100, 250],
+                stateSave: true,
+                autoWidth: false,
+                columns: [
+                    { orderable: false, searchable: false }, // details-control
+                    { type: 'string' }, // Changed On
+                    { type: 'string' }, // STFMDNO
+                    { type: 'string' }, // Version
+                    { type: 'string' }, // Field
+                    { type: 'html' },   // Old
+                    { type: 'html' },   // New
+                    { type: 'string' }, // User
+                    { type: 'string' }  // Module
+                ],
+                drawCallback: function (settings) {
+                    // Group rows by STFMDNO + Version for better readability
+                    var api = this.api();
+                    var rows = api.rows({ page: 'current' }).nodes();
+                    var last = null;
+                    api.column(2, { page: 'current' }).data().each(function (stfmdno, i) {
+                        var ver = api.cell(rows[i], 3).data();
+                        var grp = stfmdno + ' | ' + ver;
+                        if (last !== grp) {
+                            $(rows).eq(i).before(
+                                '<tr class="group-header"><td colspan="9">' +
+                                '<i class="fa fa-folder-open"></i> <strong>' + numberLabel + ':</strong> ' + stfmdno +
+                                ' &nbsp; <strong>Version:</strong> ' + ver +
+                                '</td></tr>'
+                            );
+                            last = grp;
+                        }
+                    });
+                }
+            });
+
+            // Apply per-column filters (second header row)
+            $('#logTable thead tr:eq(1) th').each(function (i) {
+                var input = $('input', this);
+                if (input.length) {
+                    $(input).on('keyup change', function () {
+                        if (table.column(i).search() !== this.value) {
+                            table.column(i).search(this.value).draw();
+                        }
+                    });
+                }
+            });
+
+            // Column visibility toggles (data-col reflects column index)
+            $('.col-toggle').on('change', function () {
+                var col = table.column(parseInt($(this).data('col'), 10));
+                col.visible(this.checked);
+            });
+
+            // Expand/collapse details rows
+            function formatDetails(tr) {
+                var row = table.row(tr).data();
+                // row indexes: [0]=control, [1]=ChangedOn, [2]=STFMDNO, [3]=Version, [4]=Field, [5]=Old, [6]=New, [7]=User, [8]=Module
+                var module = '@module';
+                var editUrl = '@Url.Action("NForm", "Seal")' + '/' + row[2];
+                var html = '' +
+                    '<div class="well" style="margin:5px 0;">' +
+                    '<div><strong>STFMDNO:</strong> ' + row[2] + ' &nbsp; <strong>Version:</strong> ' + row[3] + '</div>' +
+                    '<div><strong>Field:</strong> ' + $('<div/>').text($(row[4]).text ? $(row[4]).text() : row[4]).html() + '</div>' +
+                    '<div><strong>Old → New:</strong> ' + row[5] + ' &nbsp; <i class="fa fa-angle-right"></i> &nbsp; ' + row[6] + '</div>' +
+                    '<div><strong>Changed On / By:</strong> ' + row[1] + ' &nbsp; <span class="muted">(' + row[7] + ')</span></div>' +
+                    '<div><strong>Module:</strong> ' + row[8] + '</div>' +
+                    '<div style="margin-top:6px;">' +
+                        '<a class="btn btn-xs btn-info" target="_blank" href="' + editUrl + '"><i class="fa fa-external-link"></i> Open Record</a>' +
+                    '</div>' +
+                    '</div>';
+                return html;
+            }
+            $('#logTable tbody').on('click', 'td.details-control', function () {
+                var tr = $(this).closest('tr');
+                var row = table.row(tr);
+                if (row.child.isShown()) {
+                    row.child.hide();
+                    tr.removeClass('shown');
+                    $(this).find('.toggle').text('+');
+                } else {
+                    row.child(formatDetails(tr)).show();
+                    tr.addClass('shown');
+                    $(this).find('.toggle').text('−');
+                }
+            });
+
+            // Version compare button: if inside a form, allow normal submit (no JS).
+            // If not inside a form context, fallback to JS navigation for backward compat.
+            $('#goCompare').on('click', function (e) {
+                var $form = $(this).closest('form');
+                if ($form.length) {
+                    // Let the form submit normally to send stfmid/versionA/versionB
+                    return; // do not preventDefault
+                }
+                e.preventDefault();
+                var stfmid = $('#cmpStfmidCompare').val();
+                var a = $('#cmpA').val();
+                var b = $('#cmpB').val();
+                if (!stfmid || !a || !b) {
+                    alert('Please enter Seal Number, Version A and Version B to compare.');
+                    return;
+                }
+                var url = '@Url.Action("EditLogSealCompare", "Seal")' +
+                    '?' + $.param({ stfmid: stfmid, versionA: a, versionB: b });
+                window.location.href = url;
+            });
+        });
+    </script>
+}
+
