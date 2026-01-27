@@ -1695,6 +1695,7 @@ namespace scfs_erp.Controllers.Export
             versionA = (versionA ?? string.Empty).Trim();
             versionB = (versionB ?? string.Empty).Trim();
             
+            // Get GIDNO from gateindetails table first
             string gidnoString = gidid.Value.ToString();
             try
             {
@@ -1705,29 +1706,128 @@ namespace scfs_erp.Controllers.Export
                 }
             }
             catch { /* fallback to gidid.Value.ToString() */ }
+            
+            // Also try to get the actual GIDNO format from the edit log table (it might have leading zeros)
+            var csCheck = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (csCheck != null && !string.IsNullOrWhiteSpace(csCheck.ConnectionString))
+            {
+                try
+                {
+                    using (var sqlCheck = new SqlConnection(csCheck.ConnectionString))
+                    using (var cmdCheck = new SqlCommand(@"SELECT TOP 1 [GIDNO] FROM [dbo].[GateInDetailEditLog] 
+                                                            WHERE [Modules]='ExportGateIn' 
+                                                            AND ([GIDNO]=@GIDNO1 OR [GIDNO]=@GIDNO2 OR CAST([GIDNO] AS INT)=@GIDID)
+                                                            ORDER BY [ChangedOn] DESC", sqlCheck))
+                    {
+                        cmdCheck.Parameters.AddWithValue("@GIDNO1", gidnoString);
+                        cmdCheck.Parameters.AddWithValue("@GIDNO2", gidid.Value.ToString("D5")); // Format with leading zeros
+                        cmdCheck.Parameters.AddWithValue("@GIDID", gidid.Value);
+                        sqlCheck.Open();
+                        var actualGidno = cmdCheck.ExecuteScalar();
+                        if (actualGidno != null && actualGidno != DBNull.Value)
+                        {
+                            gidnoString = actualGidno.ToString();
+                        }
+                    }
+                }
+                catch { /* fallback to gidnoString from gateindetails */ }
+            }
 
-            var baseLabel = "v0-" + gidnoString;
-            if (string.Equals(versionA, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionA, "V0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionA, "v0", StringComparison.OrdinalIgnoreCase))
-                versionA = baseLabel;
-            if (string.Equals(versionB, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionB, "V0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionB, "v0", StringComparison.OrdinalIgnoreCase))
-                versionB = baseLabel;
+            // Normalize version strings: handle short forms like "0", "V0", "v0" and full forms like "V0-06891", "v0-06891"
+            // Database stores versions with inconsistent casing (v0-06891 vs V1-06891), so we need to handle both
+            var baseLabelV0 = "v0-" + gidnoString;  // Database uses lowercase v0 for baseline
+            var baseLabelV0Upper = "V0-" + gidnoString;
+            
+            if (string.Equals(versionA, "0", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(versionA, "V0", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(versionA, "v0", StringComparison.OrdinalIgnoreCase))
+            {
+                // Use lowercase v0 to match database format for baseline versions
+                versionA = baseLabelV0;
+            }
+            else if (versionA.Length > 2 && (versionA[0] == 'v' || versionA[0] == 'V') && char.IsDigit(versionA[1]))
+            {
+                // Extract version number and GIDNO from the version string
+                var versionMatch = System.Text.RegularExpressions.Regex.Match(versionA, @"^[vV](\d+)-(.+)$");
+                if (versionMatch.Success)
+                {
+                    var versionNum = versionMatch.Groups[1].Value;
+                    var versionGidno = versionMatch.Groups[2].Value;
+                    // Normalize: use lowercase v for v0, uppercase V for others (to match database pattern)
+                    if (versionNum == "0")
+                    {
+                        versionA = "v0-" + versionGidno;
+                    }
+                    else
+                    {
+                        versionA = "V" + versionNum + "-" + versionGidno;
+                    }
+                }
+                else
+                {
+                    // Fallback: normalize first character based on version number
+                    var versionNum = versionA.Substring(1, 1);
+                    if (versionNum == "0")
+                        versionA = "v" + versionA.Substring(1);
+                    else
+                        versionA = "V" + versionA.Substring(1);
+                }
+            }
+            
+            if (string.Equals(versionB, "0", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(versionB, "V0", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(versionB, "v0", StringComparison.OrdinalIgnoreCase))
+            {
+                versionB = baseLabelV0;
+            }
+            else if (versionB.Length > 2 && (versionB[0] == 'v' || versionB[0] == 'V') && char.IsDigit(versionB[1]))
+            {
+                // Extract version number and GIDNO from the version string
+                var versionMatch = System.Text.RegularExpressions.Regex.Match(versionB, @"^[vV](\d+)-(.+)$");
+                if (versionMatch.Success)
+                {
+                    var versionNum = versionMatch.Groups[1].Value;
+                    var versionGidno = versionMatch.Groups[2].Value;
+                    // Normalize: use lowercase v for v0, uppercase V for others (to match database pattern)
+                    if (versionNum == "0")
+                    {
+                        versionB = "v0-" + versionGidno;
+                    }
+                    else
+                    {
+                        versionB = "V" + versionNum + "-" + versionGidno;
+                    }
+                }
+                else
+                {
+                    // Fallback: normalize first character based on version number
+                    var versionNum = versionB.Substring(1, 1);
+                    if (versionNum == "0")
+                        versionB = "v" + versionB.Substring(1);
+                    else
+                        versionB = "V" + versionB.Substring(1);
+                }
+            }
 
             var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
             var a = new List<scfs_erp.Models.GateInDetailEditLogRow>();
             var b = new List<scfs_erp.Models.GateInDetailEditLogRow>();
             if (cs != null && !string.IsNullOrWhiteSpace(cs.ConnectionString))
             {
+                // Debug: Log the values being used for query
+                System.Diagnostics.Debug.WriteLine($"EditLogGateInCompare: GIDNO={gidnoString}, VersionA={versionA}, VersionB={versionB}");
+                
                 using (var sql = new SqlConnection(cs.ConnectionString))
                 using (var cmd = new SqlCommand(@"SELECT [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
                                                 FROM [dbo].[GateInDetailEditLog]
-                                                WHERE [GIDNO]=@GIDNO AND [Modules]='ExportGateIn' AND RTRIM(LTRIM([Version]))=@V", sql))
+                                                WHERE [GIDNO]=@GIDNO AND [Modules]='ExportGateIn' AND LTRIM(RTRIM(UPPER([Version])))=LTRIM(RTRIM(UPPER(@V)))", sql))
                 {
                     cmd.Parameters.Add("@GIDNO", System.Data.SqlDbType.NVarChar, 50);
                     cmd.Parameters.Add("@V", System.Data.SqlDbType.NVarChar, 100);
 
                     sql.Open();
                     cmd.Parameters["@GIDNO"].Value = gidnoString;
-                    cmd.Parameters["@V"].Value = versionA.Trim();
+                    cmd.Parameters["@V"].Value = versionA;
                     using (var r = cmd.ExecuteReader())
                     {
                         while (r.Read())
@@ -1746,7 +1846,7 @@ namespace scfs_erp.Controllers.Export
                         }
                     }
 
-                    cmd.Parameters["@V"].Value = versionB.Trim();
+                    cmd.Parameters["@V"].Value = versionB;
                     using (var r2 = cmd.ExecuteReader())
                     {
                         while (r2.Read())
