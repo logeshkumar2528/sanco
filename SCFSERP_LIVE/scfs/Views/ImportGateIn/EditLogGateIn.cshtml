@@ -76,6 +76,24 @@
         idParamName = "vtdid";
         idParamValue = Request["vtdid"] ?? Request["gidid"];
     }
+    else if (module == "OpenSheet")
+    {
+        controllerName = "OpenSheet";
+        idParamName = "osmid";
+        idParamValue = Request["osmid"] ?? Request["gidid"];
+    }
+    else if (module == "ImportDeStuff")
+    {
+        controllerName = "ImportDeStuff";
+        idParamName = "aslmid";
+        idParamValue = Request["aslmid"] ?? Request["gidid"];
+    }
+    else if (module == "ImportLoadSlip")
+    {
+        controllerName = "ImportLoadSlip";
+        idParamName = "aslmid";
+        idParamValue = Request["aslmid"] ?? Request["gidid"];
+    }
     
     // Map database field names to user-friendly display names
     var fieldNameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -240,7 +258,7 @@
 <div class="container-fluid">
     <div class="row">
         <div class="col-md-12">
-            <h2 class="page-header">@(module == "ImportVehicleTicket" ? "Vehicle Ticket" : module == "ExportGateIn" ? "Export Gate In" : module == "BondGateIn" ? "Bond Gate In" : module == "ExBondGateIn" ? "EXbond Gate In" : module == "ImportTruckOut" ? "Import Truck Out" : module == "ImportInvoice" ? "Import Invoice" : module == "ImportManualBill" ? "Import Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : "Gate In") - Edit log</h2>
+            <h2 class="page-header">@(module == "ImportVehicleTicket" ? "Vehicle Ticket" : module == "ExportGateIn" ? "Export Gate In" : module == "BondGateIn" ? "Bond Gate In" : module == "ExBondGateIn" ? "EXbond Gate In" : module == "ImportTruckOut" ? "Import Truck Out" : module == "ImportInvoice" ? "Import Invoice" : module == "ImportManualBill" ? "Import Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "OpenSheet" ? "Open Sheet" : module == "ImportDeStuff" ? "Import DeStuff" : module == "ImportLoadSlip" ? "Import Load Slip" : "Gate In") - Edit log</h2>
         </div>
     </div>
 
@@ -266,12 +284,12 @@
                     }
                     <div class="toolbar">
                         @* Compare form (GET) *@
-                        <form class="form-inline" method="get" action="@Url.Action(module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "EditLogVehicleTicketCompare" : module == "ImportTruckOut" ? "EditLogTruckOutCompare" : module == "ImportInvoice" ? "EditLogInvoiceCompare" : module == "ImportManualBill" ? "EditLogManualBillCompare" : module == "ExportManualBill" ? "EditLogExportManualBillCompare" : module == "DeliveryOrder" ? "EditLogDeliveryOrderCompare" : module == "Stuffing" ? "EditLogStuffingCompare" : module == "StuffingBill" ? "EditLogStuffingBillCompare" : module == "ExBondGateIn" ? "EditLogGateInExBondCompare" : "EditLogGateInCompare", controllerName)" style="margin-top:8px;">
+                        <form class="form-inline" method="get" action="@Url.Action(module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "EditLogVehicleTicketCompare" : module == "ImportTruckOut" ? "EditLogTruckOutCompare" : module == "ImportInvoice" ? "EditLogInvoiceCompare" : module == "ImportManualBill" ? "EditLogManualBillCompare" : module == "ExportManualBill" ? "EditLogExportManualBillCompare" : module == "DeliveryOrder" ? "EditLogDeliveryOrderCompare" : module == "Stuffing" ? "EditLogStuffingCompare" : module == "StuffingBill" ? "EditLogStuffingBillCompare" : module == "ExBondGateIn" ? "EditLogGateInExBondCompare" : module == "OpenSheet" ? "EditLogOpenSheetCompare" : module == "ImportDeStuff" ? "EditLogDeStuffCompare" : module == "ImportLoadSlip" ? "EditLogLoadSlipCompare" : "EditLogGateInCompare", controllerName)" style="margin-top:8px;">
                             <div class="form-group">
-                                <label for="cmpGidCompare">Compare Versions for @(module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "Vehicle Ticket" : module == "ImportTruckOut" ? "Truck Out" : module == "ImportInvoice" ? "Invoice" : module == "ImportManualBill" ? "Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "ExBondGateIn" ? "Ex Bond" : "GateIn") Number</label>
+                                <label for="cmpGidCompare">Compare Versions for @(module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "Vehicle Ticket" : module == "ImportTruckOut" ? "Truck Out" : module == "ImportInvoice" ? "Invoice" : module == "ImportManualBill" ? "Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "ExBondGateIn" ? "Ex Bond" : module == "OpenSheet" ? "Open Sheet" : module == "ImportDeStuff" ? "DeStuff" : module == "ImportLoadSlip" ? "Load Slip" : "GateIn") Number</label>
                             </div>
                             <div class="form-group">
-                                <input type="text" id="cmpGidCompare" name="@idParamName" class="form-control input-sm" placeholder="Enter @(module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "Vehicle Ticket" : module == "ImportTruckOut" ? "Truck Out" : module == "ImportInvoice" ? "Invoice" : module == "ImportManualBill" ? "Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "ExBondGateIn" ? "Ex Bond" : "GateIn") Number" value="@idParamValue" required />
+                                <input type="text" id="cmpGidCompare" name="@idParamName" class="form-control input-sm" placeholder="Enter @(module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "Vehicle Ticket" : module == "ImportTruckOut" ? "Truck Out" : module == "ImportInvoice" ? "Invoice" : module == "ImportManualBill" ? "Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "ExBondGateIn" ? "Ex Bond" : module == "OpenSheet" ? "Open Sheet" : module == "ImportDeStuff" ? "DeStuff" : module == "ImportLoadSlip" ? "Load Slip" : "GateIn") Number" value="@idParamValue" required />
                             </div>
                             <div class="form-group">
                                 <label for="cmpA">Version A</label>
@@ -308,7 +326,7 @@
                                         <tr>
                                             <th></th>
                                             <th class="nowrap w-150">Changed On</th>
-                                            <th class="nowrap">@(module == "ImportVehicleTicket" ? "Vehicle Ticket Number" : module == "ImportTruckOut" ? "Truck Out Number" : module == "ImportInvoice" ? "Invoice Number" : module == "ImportManualBill" ? "Manual Bill Number" : module == "ExportManualBill" ? "Export Manual Bill Number" : module == "DeliveryOrder" ? "Delivery Order Number" : module == "Stuffing" ? "Stuffing Number" : module == "StuffingBill" ? "Stuffing Bill Number" : module == "ExBondGateIn" ? "Ex Bond Number" : "GateIn Number")</th>
+                                            <th class="nowrap">@(module == "ImportVehicleTicket" ? "Vehicle Ticket Number" : module == "ImportTruckOut" ? "Truck Out Number" : module == "ImportInvoice" ? "Invoice Number" : module == "ImportManualBill" ? "Manual Bill Number" : module == "ExportManualBill" ? "Export Manual Bill Number" : module == "DeliveryOrder" ? "Delivery Order Number" : module == "Stuffing" ? "Stuffing Number" : module == "StuffingBill" ? "Stuffing Bill Number" : module == "ExBondGateIn" ? "Ex Bond Number" : module == "OpenSheet" ? "Open Sheet Number" : module == "ImportDeStuff" ? "DeStuff Number" : module == "ImportLoadSlip" ? "Load Slip Number" : "GateIn Number")</th>
                                             <th class="nowrap">Version</th>
                                             <th class="w-220">Field</th>
                                             <th class="w-220">Old Value</th>
@@ -320,7 +338,7 @@
                                         <tr>
                                             <th></th>
                                             <th><input type="text" placeholder="Search date/time" class="form-control input-sm" /></th>
-                                            <th><input type="text" placeholder="@(module == "ImportVehicleTicket" ? "Vehicle Ticket Number" : module == "ImportTruckOut" ? "Truck Out Number" : module == "ImportInvoice" ? "Invoice Number" : module == "ImportManualBill" ? "Manual Bill Number" : module == "ExportManualBill" ? "Export Manual Bill Number" : module == "DeliveryOrder" ? "Delivery Order Number" : module == "Stuffing" ? "Stuffing Number" : module == "StuffingBill" ? "Stuffing Bill Number" : module == "ExBondGateIn" ? "Ex Bond Number" : "GateIn Number")" class="form-control input-sm" /></th>
+                                            <th><input type="text" placeholder="@(module == "ImportVehicleTicket" ? "Vehicle Ticket Number" : module == "ImportTruckOut" ? "Truck Out Number" : module == "ImportInvoice" ? "Invoice Number" : module == "ImportManualBill" ? "Manual Bill Number" : module == "ExportManualBill" ? "Export Manual Bill Number" : module == "DeliveryOrder" ? "Delivery Order Number" : module == "Stuffing" ? "Stuffing Number" : module == "StuffingBill" ? "Stuffing Bill Number" : module == "ExBondGateIn" ? "Ex Bond Number" : module == "OpenSheet" ? "Open Sheet Number" : module == "ImportDeStuff" ? "DeStuff Number" : module == "ImportLoadSlip" ? "Load Slip Number" : "GateIn Number")" class="form-control input-sm" /></th>
                                             <th><input type="text" placeholder="Version" class="form-control input-sm" /></th>
                                             <th><input type="text" placeholder="Field" class="form-control input-sm" /></th>
                                             <th><input type="text" placeholder="Old value" class="form-control input-sm" /></th>
@@ -742,8 +760,8 @@
                     alert('Please enter GIDID, Version A and Version B to compare.');
                     return;
                 }
-                var url = '@Url.Action(module == "ImportInvoice" ? "EditLogInvoiceCompare" : module == "ExportManualBill" ? "EditLogExportManualBillCompare" : module == "StuffingBill" ? "EditLogStuffingBillCompare" : module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "EditLogVehicleTicketCompare" : "EditLogGateInCompare", module == "ImportInvoice" ? "ImportInvoice" : module == "ExportManualBill" ? "ExportManualBill" : module == "StuffingBill" ? "StuffingBill" : module == "ImportVehicleTicket" ? "ImportVehicleTicket" : module == "ExBondVehicleTicket" ? "ExBondVehicleTicket" : "ImportGateIn")' +
-                    '?' + $.param({ @(module == "ImportInvoice" || module == "ExportManualBill" || module == "StuffingBill" ? "tranmid" : module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "vtdid" : "gidid"): gid, versionA: a, versionB: b });
+                var url = '@Url.Action(module == "ImportInvoice" ? "EditLogInvoiceCompare" : module == "ExportManualBill" ? "EditLogExportManualBillCompare" : module == "StuffingBill" ? "EditLogStuffingBillCompare" : module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "EditLogVehicleTicketCompare" : module == "OpenSheet" ? "EditLogOpenSheetCompare" : module == "ImportDeStuff" ? "EditLogDeStuffCompare" : module == "ImportLoadSlip" ? "EditLogLoadSlipCompare" : "EditLogGateInCompare", module == "ImportInvoice" ? "ImportInvoice" : module == "ExportManualBill" ? "ExportManualBill" : module == "StuffingBill" ? "StuffingBill" : module == "ImportVehicleTicket" ? "ImportVehicleTicket" : module == "ExBondVehicleTicket" ? "ExBondVehicleTicket" : module == "OpenSheet" ? "OpenSheet" : module == "ImportDeStuff" ? "ImportDeStuff" : module == "ImportLoadSlip" ? "ImportLoadSlip" : "ImportGateIn")' +
+                    '?' + $.param({ @(module == "ImportInvoice" || module == "ExportManualBill" || module == "StuffingBill" ? "tranmid" : module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "vtdid" : module == "OpenSheet" ? "osmid" : module == "ImportDeStuff" || module == "ImportLoadSlip" ? "aslmid" : "gidid"): gid, versionA: a, versionB: b });
                 window.location.href = url;
             });
         });

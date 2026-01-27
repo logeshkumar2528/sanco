@@ -104,6 +104,18 @@
         actionName = "EditLogTruckOutCompare";
         idParamName = "godid";
     }
+    else if (module == "OpenSheet")
+    {
+        controllerName = "OpenSheet";
+        actionName = "EditLogOpenSheetCompare";
+        idParamName = "osmid";
+    }
+    else if (module == "ImportDeStuff")
+    {
+        controllerName = "ImportDeStuff";
+        actionName = "EditLogDeStuffCompare";
+        idParamName = "aslmid";
+    }
 
     // For baseline versions (V0), pick NewValue (the initial state)
     // For other versions, pick NewValue (the final state after that change)
@@ -446,14 +458,14 @@
 <div class="container-fluid">
     <div class="row">
         <div class="col-md-12">
-            <h2 class="page-header">@(module == "ImportVehicleTicket" ? "Vehicle Ticket" : module == "ExBondVehicleTicket" ? "ExBond Vehicle Ticket" : module == "ExportGateIn" ? "Export Gate In" : module == "BondGateIn" ? "Bond Gate In" : module == "ImportInvoice" ? "Import Invoice" : module == "ImportManualBill" ? "Import Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "ImportLoadSlip" ? "Import Load Slip" : module == "ImportTruckOut" ? "Import Truck Out" : "Gate In") - Version Compare</h2>
+            <h2 class="page-header">@(module == "ImportVehicleTicket" ? "Vehicle Ticket" : module == "ExBondVehicleTicket" ? "ExBond Vehicle Ticket" : module == "ExportGateIn" ? "Export Gate In" : module == "BondGateIn" ? "Bond Gate In" : module == "ImportInvoice" ? "Import Invoice" : module == "ImportManualBill" ? "Import Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "ImportLoadSlip" ? "Import Load Slip" : module == "ImportTruckOut" ? "Import Truck Out" : module == "OpenSheet" ? "Open Sheet" : module == "ImportDeStuff" ? "Import DeStuff" : "Gate In") - Version Compare</h2>
             <p class="text-muted">
-                Comparing <strong>@(module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "Vehicle Ticket" : module == "ImportInvoice" ? "Invoice" : module == "ImportManualBill" ? "Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "ImportLoadSlip" ? "Load Slip" : module == "ImportTruckOut" ? "Truck Out" : "GateIn") Number</strong> <code>@gid</code> between <strong>Version A</strong> <code>@verA</code> and <strong>Version B</strong> <code>@verB</code>.
+                Comparing <strong>@(module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "Vehicle Ticket" : module == "ImportInvoice" ? "Invoice" : module == "ImportManualBill" ? "Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "ImportLoadSlip" ? "Load Slip" : module == "ImportTruckOut" ? "Truck Out" : module == "OpenSheet" ? "Open Sheet" : module == "ImportDeStuff" ? "DeStuff" : "GateIn") Number</strong> <code>@gid</code> between <strong>Version A</strong> <code>@verA</code> and <strong>Version B</strong> <code>@verB</code>.
                 <br/>
                 <span id="changedCount" style="color: #31708f; font-weight: bold;"></span>
             </p>
             <div class="btn-group">
-                <a class="btn btn-default" href="@Url.Action(module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "EditLogVehicleTicket" : module == "ImportInvoice" ? "EditLogInvoice" : module == "ImportManualBill" ? "EditLogManualBill" : module == "ExportManualBill" ? "EditLogExportManualBill" : module == "DeliveryOrder" ? "EditLogDeliveryOrder" : module == "Stuffing" ? "EditLogStuffing" : module == "StuffingBill" ? "EditLogStuffingBill" : module == "ImportLoadSlip" ? "EditLogLoadSlip" : module == "ImportTruckOut" ? "EditLogTruckOut" : "EditLogGateIn", controllerName, new { gidid = (module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" || module == "ImportInvoice" || module == "ImportManualBill" || module == "ExportManualBill" || module == "DeliveryOrder" || module == "Stuffing" || module == "StuffingBill" || module == "ImportLoadSlip" || module == "ImportTruckOut") ? (object)null : gid, vtdid = (module == "ImportVehicleTicket" || module == "ExBondVehicleTicket") ? gid : (object)null, tranmid = (module == "ImportInvoice" || module == "ImportManualBill" || module == "ExportManualBill" || module == "StuffingBill") ? gid : (object)null, domid = module == "DeliveryOrder" ? gid : (object)null, stfmid = module == "Stuffing" ? gid : (object)null, aslmid = module == "ImportLoadSlip" ? gid : (object)null, godid = module == "ImportTruckOut" ? gid : (object)null })"><i class="fa fa-arrow-left"></i> Back to Log</a>
+                <a class="btn btn-default" href="@Url.Action(module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "EditLogVehicleTicket" : module == "ImportInvoice" ? "EditLogInvoice" : module == "ImportManualBill" ? "EditLogManualBill" : module == "ExportManualBill" ? "EditLogExportManualBill" : module == "DeliveryOrder" ? "EditLogDeliveryOrder" : module == "Stuffing" ? "EditLogStuffing" : module == "StuffingBill" ? "EditLogStuffingBill" : module == "ImportLoadSlip" ? "EditLogLoadSlip" : module == "ImportTruckOut" ? "EditLogTruckOut" : module == "OpenSheet" ? "EditLogOpenSheet" : module == "ImportDeStuff" ? "EditLogDeStuff" : "EditLogGateIn", controllerName, new { gidid = (module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" || module == "ImportInvoice" || module == "ImportManualBill" || module == "ExportManualBill" || module == "DeliveryOrder" || module == "Stuffing" || module == "StuffingBill" || module == "ImportLoadSlip" || module == "ImportTruckOut" || module == "OpenSheet" || module == "ImportDeStuff") ? (object)null : gid, vtdid = (module == "ImportVehicleTicket" || module == "ExBondVehicleTicket") ? gid : (object)null, tranmid = (module == "ImportInvoice" || module == "ImportManualBill" || module == "ExportManualBill" || module == "StuffingBill") ? gid : (object)null, domid = module == "DeliveryOrder" ? gid : (object)null, stfmid = module == "Stuffing" ? gid : (object)null, aslmid = (module == "ImportLoadSlip" || module == "ImportDeStuff") ? gid : (object)null, godid = module == "ImportTruckOut" ? gid : (object)null, osmid = module == "OpenSheet" ? gid : (object)null })"><i class="fa fa-arrow-left"></i> Back to Log</a>
             </div>
             <div class="filterbar">
                 <label>Filter field:</label>

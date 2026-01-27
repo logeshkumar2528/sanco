@@ -2527,15 +2527,18 @@ namespace scfs_erp.Controllers
                 using (var sql = new SqlConnection(cs.ConnectionString))
                 {
                     sql.Open();
-                    // Fetch version A
+                    // Fetch version A (case-insensitive and trimmed comparison)
                     using (var cmd = new SqlCommand(@"
                         SELECT [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
                         FROM [dbo].[GateInDetailEditLog]
-                        WHERE [GIDNO] = @OSMDNO AND [Modules] = 'OpenSheet' AND [Version] = @VersionA
+                        WHERE (CAST([GIDNO] AS NVARCHAR(50)) = @OSMDNO OR CAST([GIDNO] AS INT) = @OSMID) 
+                          AND [Modules] = 'OpenSheet' 
+                          AND LOWER(RTRIM(LTRIM([Version]))) = LOWER(@VersionA)
                         ORDER BY [FieldName]", sql))
                     {
                         cmd.Parameters.AddWithValue("@OSMDNO", osmdnoString);
-                        cmd.Parameters.AddWithValue("@VersionA", versionA);
+                        cmd.Parameters.AddWithValue("@OSMID", osmid.Value);
+                        cmd.Parameters.AddWithValue("@VersionA", versionA.Trim());
                         using (var r = cmd.ExecuteReader())
                         {
                             while (r.Read())
@@ -2554,15 +2557,18 @@ namespace scfs_erp.Controllers
                             }
                         }
                     }
-                    // Fetch version B
+                    // Fetch version B (case-insensitive and trimmed comparison)
                     using (var cmd = new SqlCommand(@"
                         SELECT [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
                         FROM [dbo].[GateInDetailEditLog]
-                        WHERE [GIDNO] = @OSMDNO AND [Modules] = 'OpenSheet' AND [Version] = @VersionB
+                        WHERE (CAST([GIDNO] AS NVARCHAR(50)) = @OSMDNO OR CAST([GIDNO] AS INT) = @OSMID) 
+                          AND [Modules] = 'OpenSheet' 
+                          AND LOWER(RTRIM(LTRIM([Version]))) = LOWER(@VersionB)
                         ORDER BY [FieldName]", sql))
                     {
                         cmd.Parameters.AddWithValue("@OSMDNO", osmdnoString);
-                        cmd.Parameters.AddWithValue("@VersionB", versionB);
+                        cmd.Parameters.AddWithValue("@OSMID", osmid.Value);
+                        cmd.Parameters.AddWithValue("@VersionB", versionB.Trim());
                         using (var r = cmd.ExecuteReader())
                         {
                             while (r.Read())
