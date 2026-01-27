@@ -526,22 +526,108 @@ namespace scfs.Controllers.Bond
                 vtdnoString = vehicleTicket.VTDNO;
             }
 
+            // Also try to get the actual VTDNO format from the edit log table (it might have leading zeros)
+            var csCheck = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (csCheck != null && !string.IsNullOrWhiteSpace(csCheck.ConnectionString))
+            {
+                try
+                {
+                    using (var sqlCheck = new SqlConnection(csCheck.ConnectionString))
+                    using (var cmdCheck = new SqlCommand(@"SELECT TOP 1 [GIDNO] FROM [dbo].[GateInDetailEditLog] 
+                                                            WHERE [Modules]='ExBondVehicleTicket' 
+                                                            AND ([GIDNO]=@VTDNO1 OR [GIDNO]=@VTDNO2 OR CAST([GIDNO] AS INT)=@VTDID)
+                                                            ORDER BY [ChangedOn] DESC", sqlCheck))
+                    {
+                        cmdCheck.Parameters.AddWithValue("@VTDNO1", vtdnoString);
+                        cmdCheck.Parameters.AddWithValue("@VTDNO2", vtdid.Value.ToString("D5")); // Format with leading zeros
+                        cmdCheck.Parameters.AddWithValue("@VTDID", vtdid.Value);
+                        sqlCheck.Open();
+                        var actualVtdno = cmdCheck.ExecuteScalar();
+                        if (actualVtdno != null && actualVtdno != DBNull.Value)
+                        {
+                            vtdnoString = actualVtdno.ToString();
+                        }
+                    }
+                }
+                catch { /* fallback to vtdnoString from exbondvtdtls */ }
+            }
+
             // Normalize version strings
             versionA = (versionA ?? string.Empty).Trim();
             versionB = (versionB ?? string.Empty).Trim();
             
-            // Map '0' or 'v0'/'V0' to 'v0-<VTDNO>' for baseline comparisons
-            if (vtdid.HasValue)
+            // Normalize version strings: handle short forms like "0", "V0", "v0" and full forms like "V0-00509", "v0-00509"
+            // Database stores versions with inconsistent casing (v0-00509 vs V1-00509), so we need to handle both
+            var baseLabelV0 = "v0-" + vtdnoString;  // Database uses lowercase v0 for baseline
+            
+            if (string.Equals(versionA, "0", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(versionA, "V0", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(versionA, "v0", StringComparison.OrdinalIgnoreCase))
             {
-                var baseLabel = "v0-" + vtdnoString;
-                if (string.Equals(versionA, "0", StringComparison.OrdinalIgnoreCase) || 
-                    string.Equals(versionA, "V0", StringComparison.OrdinalIgnoreCase) || 
-                    string.Equals(versionA, "v0", StringComparison.OrdinalIgnoreCase))
-                    versionA = baseLabel;
-                if (string.Equals(versionB, "0", StringComparison.OrdinalIgnoreCase) || 
-                    string.Equals(versionB, "V0", StringComparison.OrdinalIgnoreCase) || 
-                    string.Equals(versionB, "v0", StringComparison.OrdinalIgnoreCase))
-                    versionB = baseLabel;
+                versionA = baseLabelV0;
+            }
+            else if (versionA.Length > 2 && (versionA[0] == 'v' || versionA[0] == 'V') && char.IsDigit(versionA[1]))
+            {
+                // Extract version number and VTDNO from the version string
+                var versionMatch = System.Text.RegularExpressions.Regex.Match(versionA, @"^[vV](\d+)-(.+)$");
+                if (versionMatch.Success)
+                {
+                    var versionNum = versionMatch.Groups[1].Value;
+                    var versionVtdno = versionMatch.Groups[2].Value;
+                    // Normalize: use lowercase v for v0, uppercase V for others (to match database pattern)
+                    if (versionNum == "0")
+                    {
+                        versionA = "v0-" + versionVtdno;
+                    }
+                    else
+                    {
+                        versionA = "V" + versionNum + "-" + versionVtdno;
+                    }
+                }
+                else
+                {
+                    // Fallback: normalize first character based on version number
+                    var versionNum = versionA.Substring(1, 1);
+                    if (versionNum == "0")
+                        versionA = "v" + versionA.Substring(1);
+                    else
+                        versionA = "V" + versionA.Substring(1);
+                }
+            }
+            
+            if (string.Equals(versionB, "0", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(versionB, "V0", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(versionB, "v0", StringComparison.OrdinalIgnoreCase))
+            {
+                versionB = baseLabelV0;
+            }
+            else if (versionB.Length > 2 && (versionB[0] == 'v' || versionB[0] == 'V') && char.IsDigit(versionB[1]))
+            {
+                // Extract version number and VTDNO from the version string
+                var versionMatch = System.Text.RegularExpressions.Regex.Match(versionB, @"^[vV](\d+)-(.+)$");
+                if (versionMatch.Success)
+                {
+                    var versionNum = versionMatch.Groups[1].Value;
+                    var versionVtdno = versionMatch.Groups[2].Value;
+                    // Normalize: use lowercase v for v0, uppercase V for others (to match database pattern)
+                    if (versionNum == "0")
+                    {
+                        versionB = "v0-" + versionVtdno;
+                    }
+                    else
+                    {
+                        versionB = "V" + versionNum + "-" + versionVtdno;
+                    }
+                }
+                else
+                {
+                    // Fallback: normalize first character based on version number
+                    var versionNum = versionB.Substring(1, 1);
+                    if (versionNum == "0")
+                        versionB = "v" + versionB.Substring(1);
+                    else
+                        versionB = "V" + versionB.Substring(1);
+                }
             }
 
             var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
@@ -550,12 +636,15 @@ namespace scfs.Controllers.Bond
             
             if (cs != null && !string.IsNullOrWhiteSpace(cs.ConnectionString))
             {
+                // Debug: Log the values being used for query
+                System.Diagnostics.Debug.WriteLine($"EditLogVehicleTicketCompare (ExBond): VTDNO={vtdnoString}, VersionA={versionA}, VersionB={versionB}");
+                
                 using (var sql = new SqlConnection(cs.ConnectionString))
                 using (var cmd = new SqlCommand(@"SELECT [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
                                                 FROM [dbo].[GateInDetailEditLog]
                                                 WHERE [Modules] = 'ExBondVehicleTicket'
                                                   AND (CAST([GIDNO] AS NVARCHAR(50)) = @VTDNO_STR OR CAST([GIDNO] AS NVARCHAR(50)) = CAST(@VTDID AS NVARCHAR(50)))
-                                                  AND RTRIM(LTRIM([Version])) = @V", sql))
+                                                  AND LTRIM(RTRIM(UPPER([Version])))=LTRIM(RTRIM(UPPER(@V)))", sql))
                 {
                     cmd.Parameters.Add("@VTDID", System.Data.SqlDbType.Int);
                     cmd.Parameters.Add("@VTDNO_STR", System.Data.SqlDbType.NVarChar, 50);
@@ -564,7 +653,7 @@ namespace scfs.Controllers.Bond
                     sql.Open();
                     cmd.Parameters["@VTDID"].Value = vtdid.Value;
                     cmd.Parameters["@VTDNO_STR"].Value = vtdnoString;
-                    cmd.Parameters["@V"].Value = versionA.Trim();
+                    cmd.Parameters["@V"].Value = versionA;
                     using (var r = cmd.ExecuteReader())
                     {
                         while (r.Read())
@@ -583,7 +672,7 @@ namespace scfs.Controllers.Bond
                         }
                     }
 
-                    cmd.Parameters["@V"].Value = versionB.Trim();
+                    cmd.Parameters["@V"].Value = versionB;
                     using (var r2 = cmd.ExecuteReader())
                     {
                         while (r2.Read())

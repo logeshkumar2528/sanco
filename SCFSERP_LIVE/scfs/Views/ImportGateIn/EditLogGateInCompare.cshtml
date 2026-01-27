@@ -22,6 +22,10 @@
     var rowsA = (IEnumerable<scfs_erp.Models.GateInDetailEditLogRow>)ViewBag.RowsA ?? new List<scfs_erp.Models.GateInDetailEditLogRow>();
     var rowsB = (IEnumerable<scfs_erp.Models.GateInDetailEditLogRow>)ViewBag.RowsB ?? new List<scfs_erp.Models.GateInDetailEditLogRow>();
     var module = ViewBag.Module as string ?? "ImportGateIn";
+    
+    // Check if either version is v0 (baseline)
+    var isVersionAV0 = !string.IsNullOrEmpty(verA) && (verA.StartsWith("v0-", StringComparison.OrdinalIgnoreCase) || verA.StartsWith("V0-", StringComparison.OrdinalIgnoreCase) || verA.Equals("v0", StringComparison.OrdinalIgnoreCase) || verA.Equals("V0", StringComparison.OrdinalIgnoreCase) || verA == "0");
+    var isVersionBV0 = !string.IsNullOrEmpty(verB) && (verB.StartsWith("v0-", StringComparison.OrdinalIgnoreCase) || verB.StartsWith("V0-", StringComparison.OrdinalIgnoreCase) || verB.Equals("v0", StringComparison.OrdinalIgnoreCase) || verB.Equals("V0", StringComparison.OrdinalIgnoreCase) || verB == "0");
     var controllerName = "ImportGateIn";
     var actionName = "EditLogGateInCompare";
     var idParamName = "gidid";
@@ -504,29 +508,52 @@
                             var va = dictA.ContainsKey(f) ? dictA[f] : "";
                             var vb = dictB.ContainsKey(f) ? dictB[f] : "";
                             
-                            // For the "Old Value" column (Version A), use V0's value (baseline)
-                            // If V0 doesn't have the field but V1 does, use V1's OldValue (what it was before V1's change)
+                            // For the "Old Value" column (Version A), use Version A's value
+                            // If Version A is v0 (baseline), use NewValue from v0 records
+                            // If Version A is not v0, use NewValue (final state after that version's changes)
                             var valA = va;
                             if (string.IsNullOrEmpty(valA) && dictB.ContainsKey(f))
                             {
-                                // Field doesn't exist in V0 but exists in V1
-                                // Use V1's OldValue as the baseline (what it was before V1's change)
-                                valA = dictB_Old.ContainsKey(f) ? dictB_Old[f] : "";
-                            }
-                            
-                            // For the "New Value" column (Version B), use V1's final state
-                            var valB = vb;
-                            
-                            // Special handling: If V1 has a change record (exists in dictB), and V0's value equals V1's NewValue,
-                            // then the actual change is from V1's OldValue to V1's NewValue, not from V0 to V1
-                            // So use V1's OldValue as valA to show the actual change
-                            if (dictB.ContainsKey(f) && dictB_Old.ContainsKey(f) && !string.IsNullOrEmpty(dictB_Old[f]))
-                            {
-                                // V1 has this field with a change record
-                                // If V0's final state equals V1's final state, use V1's OldValue to show the change
-                                if (va == vb || string.IsNullOrEmpty(va))
+                                // Field doesn't exist in Version A but exists in Version B
+                                // If Version B is not v0, use Version B's OldValue as the baseline
+                                if (!isVersionBV0 && dictB_Old.ContainsKey(f))
                                 {
                                     valA = dictB_Old[f];
+                                }
+                            }
+                            
+                            // For the "New Value" column (Version B), use Version B's value
+                            // If Version B is v0 (baseline), use NewValue from v0 records
+                            // If Version B is not v0, use NewValue (final state after that version's changes)
+                            var valB = vb;
+                            
+                            // Special handling for v0 comparisons:
+                            // When comparing v0 with another version, always show v0's actual NewValue
+                            // Don't try to infer changes from other version's OldValue
+                            if (isVersionAV0)
+                            {
+                                // Version A is v0 - use v0's NewValue directly (already in valA from dictA)
+                                // Don't override with Version B's OldValue
+                                valA = va;
+                            }
+                            else if (isVersionBV0)
+                            {
+                                // Version B is v0 - use v0's NewValue directly (already in valB from dictB)
+                                valB = vb;
+                            }
+                            else
+                            {
+                                // Neither is v0 - use standard comparison logic
+                                // If Version B has a change record and Version A's value equals Version B's NewValue,
+                                // use Version B's OldValue to show the actual change
+                                if (dictB.ContainsKey(f) && dictB_Old.ContainsKey(f) && !string.IsNullOrEmpty(dictB_Old[f]))
+                                {
+                                    // Version B has this field with a change record
+                                    // If Version A's final state equals Version B's final state, use Version B's OldValue to show the change
+                                    if (va == vb || string.IsNullOrEmpty(va))
+                                    {
+                                        valA = dictB_Old[f];
+                                    }
                                 }
                             }
                             
@@ -655,11 +682,24 @@
                             // Check if this field should always be displayed
                             bool shouldAlwaysDisplay = alwaysDisplayFields.Contains(f) || alwaysDisplayFields.Contains(friendlyFieldName);
                             
+                            // Special handling for v0 comparisons: show all fields from v0, even if unchanged
+                            bool isV0Comparison = isVersionAV0 || isVersionBV0;
+                            bool fieldExistsInV0 = false;
+                            if (isVersionAV0 && dictA.ContainsKey(f) && !string.IsNullOrEmpty(va))
+                            {
+                                fieldExistsInV0 = true;
+                            }
+                            if (isVersionBV0 && dictB.ContainsKey(f) && !string.IsNullOrEmpty(vb))
+                            {
+                                fieldExistsInV0 = true;
+                            }
+                            
                             // Show fields if:
                             // 1. They should always be displayed, OR
-                            // 2. They exist in at least one version (not both empty) AND they are different
+                            // 2. It's a v0 comparison and the field exists in v0 (show all v0 values), OR
+                            // 3. They exist in at least one version (not both empty) AND they are different
                             bool bothEmpty = string.IsNullOrEmpty(valA) && string.IsNullOrEmpty(valB);
-                            if (!shouldAlwaysDisplay && (bothEmpty || !diff))
+                            if (!shouldAlwaysDisplay && !(isV0Comparison && fieldExistsInV0) && (bothEmpty || !diff))
                             {
                                 continue;
                             }

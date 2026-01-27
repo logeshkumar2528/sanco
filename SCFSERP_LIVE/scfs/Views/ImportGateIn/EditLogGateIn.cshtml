@@ -70,6 +70,12 @@
         idParamName = "gidid";
         idParamValue = Request["gidid"];
     }
+    else if (module == "ExBondVehicleTicket")
+    {
+        controllerName = "ExBondVehicleTicket";
+        idParamName = "vtdid";
+        idParamValue = Request["vtdid"] ?? Request["gidid"];
+    }
     
     // Map database field names to user-friendly display names
     var fieldNameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -260,12 +266,12 @@
                     }
                     <div class="toolbar">
                         @* Compare form (GET) *@
-                        <form class="form-inline" method="get" action="@Url.Action(module == "ImportVehicleTicket" ? "EditLogVehicleTicketCompare" : module == "ImportTruckOut" ? "EditLogTruckOutCompare" : module == "ImportInvoice" ? "EditLogInvoiceCompare" : module == "ImportManualBill" ? "EditLogManualBillCompare" : module == "ExportManualBill" ? "EditLogExportManualBillCompare" : module == "DeliveryOrder" ? "EditLogDeliveryOrderCompare" : module == "Stuffing" ? "EditLogStuffingCompare" : module == "StuffingBill" ? "EditLogStuffingBillCompare" : module == "ExBondGateIn" ? "EditLogGateInExBondCompare" : "EditLogGateInCompare", controllerName)" style="margin-top:8px;">
+                        <form class="form-inline" method="get" action="@Url.Action(module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "EditLogVehicleTicketCompare" : module == "ImportTruckOut" ? "EditLogTruckOutCompare" : module == "ImportInvoice" ? "EditLogInvoiceCompare" : module == "ImportManualBill" ? "EditLogManualBillCompare" : module == "ExportManualBill" ? "EditLogExportManualBillCompare" : module == "DeliveryOrder" ? "EditLogDeliveryOrderCompare" : module == "Stuffing" ? "EditLogStuffingCompare" : module == "StuffingBill" ? "EditLogStuffingBillCompare" : module == "ExBondGateIn" ? "EditLogGateInExBondCompare" : "EditLogGateInCompare", controllerName)" style="margin-top:8px;">
                             <div class="form-group">
-                                <label for="cmpGidCompare">Compare Versions for @(module == "ImportVehicleTicket" ? "Vehicle Ticket" : module == "ImportTruckOut" ? "Truck Out" : module == "ImportInvoice" ? "Invoice" : module == "ImportManualBill" ? "Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "ExBondGateIn" ? "Ex Bond" : "GateIn") Number</label>
+                                <label for="cmpGidCompare">Compare Versions for @(module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "Vehicle Ticket" : module == "ImportTruckOut" ? "Truck Out" : module == "ImportInvoice" ? "Invoice" : module == "ImportManualBill" ? "Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "ExBondGateIn" ? "Ex Bond" : "GateIn") Number</label>
                             </div>
                             <div class="form-group">
-                                <input type="text" id="cmpGidCompare" name="@idParamName" class="form-control input-sm" placeholder="Enter @(module == "ImportVehicleTicket" ? "Vehicle Ticket" : module == "ImportTruckOut" ? "Truck Out" : module == "ImportInvoice" ? "Invoice" : module == "ImportManualBill" ? "Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "ExBondGateIn" ? "Ex Bond" : "GateIn") Number" value="@idParamValue" required />
+                                <input type="text" id="cmpGidCompare" name="@idParamName" class="form-control input-sm" placeholder="Enter @(module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "Vehicle Ticket" : module == "ImportTruckOut" ? "Truck Out" : module == "ImportInvoice" ? "Invoice" : module == "ImportManualBill" ? "Manual Bill" : module == "ExportManualBill" ? "Export Manual Bill" : module == "DeliveryOrder" ? "Delivery Order" : module == "Stuffing" ? "Stuffing" : module == "StuffingBill" ? "Stuffing Bill" : module == "ExBondGateIn" ? "Ex Bond" : "GateIn") Number" value="@idParamValue" required />
                             </div>
                             <div class="form-group">
                                 <label for="cmpA">Version A</label>
@@ -736,8 +742,8 @@
                     alert('Please enter GIDID, Version A and Version B to compare.');
                     return;
                 }
-                var url = '@Url.Action(module == "ImportInvoice" ? "EditLogInvoiceCompare" : module == "ExportManualBill" ? "EditLogExportManualBillCompare" : module == "StuffingBill" ? "EditLogStuffingBillCompare" : "EditLogGateInCompare", module == "ImportInvoice" ? "ImportInvoice" : module == "ExportManualBill" ? "ExportManualBill" : module == "StuffingBill" ? "StuffingBill" : "ImportGateIn")' +
-                    '?' + $.param({ @(module == "ImportInvoice" || module == "ExportManualBill" || module == "StuffingBill" ? "tranmid" : "gidid"): gid, versionA: a, versionB: b });
+                var url = '@Url.Action(module == "ImportInvoice" ? "EditLogInvoiceCompare" : module == "ExportManualBill" ? "EditLogExportManualBillCompare" : module == "StuffingBill" ? "EditLogStuffingBillCompare" : module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "EditLogVehicleTicketCompare" : "EditLogGateInCompare", module == "ImportInvoice" ? "ImportInvoice" : module == "ExportManualBill" ? "ExportManualBill" : module == "StuffingBill" ? "StuffingBill" : module == "ImportVehicleTicket" ? "ImportVehicleTicket" : module == "ExBondVehicleTicket" ? "ExBondVehicleTicket" : "ImportGateIn")' +
+                    '?' + $.param({ @(module == "ImportInvoice" || module == "ExportManualBill" || module == "StuffingBill" ? "tranmid" : module == "ImportVehicleTicket" || module == "ExBondVehicleTicket" ? "vtdid" : "gidid"): gid, versionA: a, versionB: b });
                 window.location.href = url;
             });
         });
