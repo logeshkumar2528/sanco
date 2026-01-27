@@ -208,6 +208,9 @@
         // Removed duplicate keys: DISPSTATUS and PRDTGID already defined above
         // Vehicle Ticket fields (only unique fields - VHLNO, DRVNAME, TRNSPRTNAME already exist above)
         {"VTDATE", "Date"}, {"VTTIME", "Time"}, {"VTNO", "Ticket No"}, {"VTDNO", "Ticket Detail No"},
+        // ImportTruckOut fields
+        {"GODATE", "Truck Out Date"}, {"GOTIME", "Truck Out Time"}, {"GODNO", "Truck Out Number"}, {"GODDNO", "Truck Out Detail Number"},
+        {"Gate Out Date", "Truck Out Date"}, {"Gate Out Time", "Truck Out Time"}, {"Gate Out Number", "Truck Out Number"},
         {"ASLDID", "ASL ID"}, {"VTDESC", "Description"},
         {"VTQTY", "NOP"}, {"VTTYPE", "Type"}, {"VTSTYPE", "Status Type"}, {"VTREMRKS", "Remarks"},
         {"VTAREA", "Space"}, {"EBVTNOC", "No.of Containers"},
@@ -357,7 +360,10 @@
         "Storage IGST Amount", "Storage IGST %", "Handling Taxable Amount", "Storage Taxable Amount", "Handling HSN Code", "Storage HSN Code", // ExportManualBill - exclude friendly names
         // StuffingBill - exclude removed fields
         "TRANHAMT", "Handling Amount", "TRANLMDATE", "TRANLSDATE", "TRANNARTN", "Narration", "TRANREFBNAME", "Bank", // StuffingBill - exclude Handling Amount, Lorry dates, Narration, and duplicate Bank
-        "GTRNSPRTNAME", "Other Transporter Name", "Other Transpoter Name" // Exclude Other Transporter Name field (including typo variant)
+        "GTRNSPRTNAME", "Other Transporter Name", "Other Transpoter Name", // Exclude Other Transporter Name field (including typo variant)
+        // ImportTruckOut - exclude unwanted fields
+        "Out Vessel ID", "OTDID", "Quantity", "GODQTY", "Gate Out O Type", "GODOTYPE", "Gate In Detail", "GIDID", 
+        "BOOKID", "CONTNRFID", "Gate Out C Type", "GODCTYPE", "Gate Out T Type", "GODTTYPE", "Status", "DISPSTATUS"
     };
     
     Func<string, string> getFriendlyName = fieldName => 

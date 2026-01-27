@@ -485,9 +485,9 @@ namespace scfs_erp.Controllers.Import
                     if (string.IsNullOrWhiteSpace(field)) return field;
                     switch (field.ToUpper())
                     {
-                        case "GODATE": return "Gate Out Date";
-                        case "GOTIME": return "Gate Out Time";
-                        case "GODNO": return "Gate Out Number";
+                        case "GODATE": return "Truck Out Date";
+                        case "GOTIME": return "Truck Out Time";
+                        case "GODNO": return "Truck Out Number";
                         case "VHLNO": return "Vehicle Number";
                         case "GDRVNAME": return "Driver Name";
                         case "CHASNAME": return "CHA Name";
@@ -726,9 +726,9 @@ namespace scfs_erp.Controllers.Import
                     if (string.IsNullOrWhiteSpace(field)) return field;
                     switch (field.ToUpper())
                     {
-                        case "GODATE": return "Gate Out Date";
-                        case "GOTIME": return "Gate Out Time";
-                        case "GODNO": return "Gate Out Number";
+                        case "GODATE": return "Truck Out Date";
+                        case "GOTIME": return "Truck Out Time";
+                        case "GODNO": return "Truck Out Number";
                         case "VHLNO": return "Vehicle Number";
                         case "GDRVNAME": return "Driver Name";
                         case "CHASNAME": return "CHA Name";
