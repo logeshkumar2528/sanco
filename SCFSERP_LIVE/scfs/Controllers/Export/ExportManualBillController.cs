@@ -10,6 +10,7 @@ using System.Configuration;
 using System.Data.Entity.Infrastructure;
 using System.Data.SqlClient;
 using System.Linq;
+using System.Reflection;
 using System.Web;
 using System.Web.Mvc;
 
@@ -958,6 +959,13 @@ namespace scfs_erp.Controllers.Export
                         string DELIDS = "";
                         //-----End
 
+                        // Capture BEFORE state for edit logging
+                        TransactionMaster original = null;
+                        if (TRANMID != 0)
+                        {
+                            original = context.transactionmaster.AsNoTracking().FirstOrDefault(x => x.TRANMID == TRANMID);
+                        }
+
                         if (TRANMID != 0)
                         {
                             transactionmaster = context.transactionmaster.Find(TRANMID);
@@ -1294,6 +1302,44 @@ namespace scfs_erp.Controllers.Export
                         trans.Commit();
                         TRANMID = transactionmaster.TRANMID;
                         context.Database.ExecuteSqlCommand("EXEC PR_EXPORT_MANUAL_BILL_TRANMASTER_UPD @PTRANMID =" + TRANMID);
+                        
+                        // Log changes to GateInDetailEditLog after successful save
+                        try
+                        {
+                            if (TRANMID != 0 && original != null)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"ORIGINAL RECORD FOUND: TRANMID={original.TRANMID}, calling LogTransactionEdits");
+                                
+                                // Ensure baseline snapshot (Version = "0") exists for this record before logging diffs
+                                EnsureBaselineVersionZero(original, Session["CUSRID"] != null ? Session["CUSRID"].ToString() : "");
+                                
+                                // Reload the saved record to get the final state (after transaction commit)
+                                using (var logContext = new SCFSERPContext())
+                                {
+                                    var savedRecord = logContext.transactionmaster.AsNoTracking().FirstOrDefault(x => x.TRANMID == TRANMID);
+                                    if (savedRecord != null)
+                                    {
+                                        LogTransactionEdits(original, savedRecord, Session["CUSRID"] != null ? Session["CUSRID"].ToString() : "");
+                                        System.Diagnostics.Debug.WriteLine($"LogTransactionEdits completed successfully");
+                                    }
+                                    else
+                                    {
+                                        System.Diagnostics.Debug.WriteLine($"SAVED RECORD NOT FOUND after commit for TRANMID={transactionmaster.TRANMID}");
+                                    }
+                                }
+                            }
+                            else if (TRANMID != 0 && original == null)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"ORIGINAL RECORD NOT FOUND for TRANMID={transactionmaster.TRANMID}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            // Log the error for debugging - don't fail the save if logging fails
+                            System.Diagnostics.Debug.WriteLine($"Edit logging failed: {ex.Message}");
+                            System.Diagnostics.Debug.WriteLine($"Stack trace: {ex.StackTrace}");
+                        }
+                        
                         Response.Redirect("Index");
                     }
                     catch (Exception EX)
@@ -1549,5 +1595,774 @@ namespace scfs_erp.Controllers.Export
                 Response.Write(temp);
 
         }//-----End of Delete Row
+
+        #region Edit Log Methods
+        public ActionResult EditLogExportManualBill(int? tranmid, DateTime? from = null, DateTime? to = null, string user = null, string fieldName = null, string version = null)
+        {
+            if (Convert.ToInt32(Session["compyid"]) == 0) { return RedirectToAction("Login", "Account"); }
+
+            var list = new List<scfs_erp.Models.GateInDetailEditLogRow>();
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (cs != null && !string.IsNullOrWhiteSpace(cs.ConnectionString))
+            {
+                // Convert tranmid to string for GIDNO comparison (GIDNO stores TRANMID as string)
+                string gidnoParam = tranmid.HasValue ? tranmid.Value.ToString() : null;
+                
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                using (var cmd = new SqlCommand(@"SELECT TOP 2000 [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
+                                                FROM [dbo].[GateInDetailEditLog]
+                                                WHERE [Modules] = 'ExportManualBill'
+                                                  AND (@GIDNO IS NULL OR [GIDNO] = @GIDNO)
+                                                  AND (@FROM IS NULL OR [ChangedOn] >= @FROM)
+                                                  AND (@TO   IS NULL OR [ChangedOn] <  DATEADD(day, 1, @TO))
+                                                  AND (@USER IS NULL OR [ChangedBy] LIKE @USERPAT)
+                                                  AND (@FIELD IS NULL OR [FieldName] LIKE @FIELDPAT)
+                                                  AND (@VERSION IS NULL OR [Version] LIKE @VERPAT)
+                                                  AND NOT (RTRIM(LTRIM([Version])) IN ('0','V0') OR LEFT(RTRIM(LTRIM([Version])),3) IN ('v0-','V0-'))
+                                                  -- Only show rows where OldValue and NewValue are actually different
+                                                  AND (
+                                                      (LTRIM(RTRIM(ISNULL([OldValue], ''))) != LTRIM(RTRIM(ISNULL([NewValue], ''))))
+                                                      OR (LTRIM(RTRIM(ISNULL([OldValue], ''))) = '' AND LTRIM(RTRIM(ISNULL([NewValue], ''))) != '')
+                                                      OR (LTRIM(RTRIM(ISNULL([OldValue], ''))) != '' AND LTRIM(RTRIM(ISNULL([NewValue], ''))) = '')
+                                                  )
+                                                ORDER BY [ChangedOn] DESC, [GIDNO] DESC", sql))
+                {
+                    cmd.Parameters.AddWithValue("@GIDNO", string.IsNullOrEmpty(gidnoParam) ? (object)DBNull.Value : gidnoParam);
+                    cmd.Parameters.AddWithValue("@FROM", (object)from ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@TO", (object)to ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@USER", string.IsNullOrWhiteSpace(user) ? (object)DBNull.Value : user);
+                    cmd.Parameters.AddWithValue("@USERPAT", string.IsNullOrWhiteSpace(user) ? (object)DBNull.Value : (object)("%" + user + "%"));
+                    cmd.Parameters.AddWithValue("@FIELD", string.IsNullOrWhiteSpace(fieldName) ? (object)DBNull.Value : fieldName);
+                    cmd.Parameters.AddWithValue("@FIELDPAT", string.IsNullOrWhiteSpace(fieldName) ? (object)DBNull.Value : (object)("%" + fieldName + "%"));
+                    cmd.Parameters.AddWithValue("@VERSION", string.IsNullOrWhiteSpace(version) ? (object)DBNull.Value : version);
+                    cmd.Parameters.AddWithValue("@VERPAT", string.IsNullOrWhiteSpace(version) ? (object)DBNull.Value : (object)("%" + version + "%"));
+                    sql.Open();
+                    using (var r = cmd.ExecuteReader())
+                    {
+                        while (r.Read())
+                        {
+                            list.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                            {
+                                GIDNO = Convert.ToString(r["GIDNO"]),
+                                FieldName = Convert.ToString(r["FieldName"]),
+                                OldValue = r["OldValue"] == DBNull.Value ? null : Convert.ToString(r["OldValue"]),
+                                NewValue = r["NewValue"] == DBNull.Value ? null : Convert.ToString(r["NewValue"]),
+                                ChangedBy = Convert.ToString(r["ChangedBy"]),
+                                ChangedOn = r["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r["ChangedOn"]) : DateTime.MinValue,
+                                Version = r["Version"] == DBNull.Value ? null : Convert.ToString(r["Version"]),
+                                Modules = r["Modules"] == DBNull.Value ? null : Convert.ToString(r["Modules"])
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Map raw DB codes to form-friendly display values for known fields
+            try
+            {
+                // Build lookup dictionaries once
+                var dictBank = context.bankmasters.ToDictionary(x => x.BANKMID, x => x.BANKMDESC);
+                var dictCate = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
+                var dictTariff = context.tariffmasters.ToDictionary(x => x.TARIFFMID, x => x.TARIFFMDESC);
+                var dictMode = context.transactionmodemaster.ToDictionary(x => x.TRANMODE, x => x.TRANMODEDETL);
+
+                var dictState = context.statemasters.ToDictionary(x => x.STATEID, x => x.STATEDESC);
+                var dictTallyCHA = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
+                var dictTallyCate = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
+
+                Func<string, string, string> Map = (field, val) =>
+                {
+                    if (string.IsNullOrWhiteSpace(val)) return val;
+                    try
+                    {
+                        int id = 0;
+                        if (field == "BANKMID" && int.TryParse(val, out id) && dictBank.ContainsKey(id))
+                            return dictBank[id];
+                        if (field == "LCATEID" && int.TryParse(val, out id) && dictCate.ContainsKey(id))
+                            return dictCate[id];
+                        if (field == "CATEAID" && int.TryParse(val, out id) && dictCate.ContainsKey(id))
+                            return dictCate[id];
+                        if (field == "TCATEAID" && int.TryParse(val, out id) && dictTallyCate.ContainsKey(id))
+                            return dictTallyCate[id];
+                        if (field == "TARIFFMID" && int.TryParse(val, out id) && dictTariff.ContainsKey(id))
+                            return dictTariff[id];
+                        if (field == "TRANMODE" && int.TryParse(val, out id) && dictMode.ContainsKey(id))
+                            return dictMode[id];
+                        if (field == "STATEID" && int.TryParse(val, out id) && dictState.ContainsKey(id))
+                            return dictState[id];
+                        if (field == "TSTATEID" && int.TryParse(val, out id) && dictState.ContainsKey(id))
+                            return dictState[id];
+                        if (field == "TRANTALLYCHAID" && int.TryParse(val, out id) && dictTallyCHA.ContainsKey(id))
+                            return dictTallyCHA[id];
+                        if (field == "DISPSTATUS")
+                            return val == "1" ? "CANCELLED" : val == "0" ? "INBOOKS" : val;
+                    }
+                    catch { }
+                    return val;
+                };
+
+                Func<string, string> Friendly = field =>
+                {
+                    var fieldNameMap = GetTransactionFieldDisplayNames();
+                    if (fieldNameMap.ContainsKey(field)) return fieldNameMap[field];
+                    return field.Replace("_", " ").Trim();
+                };
+
+                // Filter out removed fields before processing
+                list = list.Where(row => {
+                    if (row.FieldName == null) return true;
+                    var rowFieldName = row.FieldName.Trim();
+                    // Skip removed fields
+                    if (rowFieldName.Equals("TRANREFID", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("TRANREFBNAME", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("TRANAMTWRDS", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("TRANLMDATE", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("TRANLSDATE", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("HANDL_SGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("HANDL_CGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("HANDL_SGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("HANDL_CGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("STRG_CGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("STRG_SGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("STRG_SGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("STRG_CGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("HANDL_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("STRG_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("HANDL_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("STRG_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("CHA", StringComparison.OrdinalIgnoreCase) && row.FieldName.Equals("TRANREFID", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Bank", StringComparison.OrdinalIgnoreCase) && row.FieldName.Equals("TRANREFBNAME", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Amount in Words", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Lorry Memo Date", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Lorry Slip Date", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Handling SGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Handling CGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Handling SGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Handling CGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Storage CGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Storage SGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Storage SGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Storage CGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Handling Taxable Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Storage Taxable Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Handling HSN Code", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Storage HSN Code", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("TRANTALLYCHAID", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Tally CHA", StringComparison.OrdinalIgnoreCase) && row.FieldName.Equals("TRANTALLYCHAID", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+                    return true;
+                }).ToList();
+
+                foreach (var row in list)
+                {
+                    row.OldValue = Map(row.FieldName, row.OldValue);
+                    row.NewValue = Map(row.FieldName, row.NewValue);
+                    row.FieldName = Friendly(row.FieldName);
+                }
+            }
+            catch { /* Best-effort mapping; do not fail page if lookups have issues */ }
+
+            ViewBag.Module = "ExportManualBill";
+            return View("~/Views/ImportGateIn/EditLogGateIn.cshtml", list);
+        }
+
+        // Compare two versions for a given TRANMID
+        public ActionResult EditLogExportManualBillCompare(int? tranmid, string versionA, string versionB)
+        {
+            if (Convert.ToInt32(Session["compyid"]) == 0) { return RedirectToAction("Login", "Account"); }
+
+            // Fallbacks: try alternate parameter names
+            if (tranmid == null)
+            {
+                int tmp;
+                var qsTran = Request["tranmid"] ?? Request["id"];
+                if (!string.IsNullOrWhiteSpace(qsTran) && int.TryParse(qsTran.Trim(), out tmp))
+                {
+                    tranmid = tmp;
+                }
+            }
+
+            // Normalize version strings (remove any whitespace/tabs)
+            versionA = (versionA ?? string.Empty).Trim();
+            versionB = (versionB ?? string.Empty).Trim();
+
+            if (tranmid == null || string.IsNullOrWhiteSpace(versionA) || string.IsNullOrWhiteSpace(versionB))
+            {
+                TempData["Err"] = "Please provide TRANMID, Version A and Version B to compare.";
+                return RedirectToAction("EditLogExportManualBill", new { tranmid = tranmid });
+            }
+
+            // Use TRANMID as the primary identifier (consistent with logging)
+            string gidnoString = tranmid.HasValue ? tranmid.Value.ToString() : "";
+
+            // Support baseline shortcuts
+            var baseLabel = "v0-" + gidnoString;
+            if (string.Equals(versionA, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionA, "V0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionA, "v0", StringComparison.OrdinalIgnoreCase))
+                versionA = baseLabel;
+            if (string.Equals(versionB, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionB, "V0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionB, "v0", StringComparison.OrdinalIgnoreCase))
+                versionB = baseLabel;
+
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            var a = new List<scfs_erp.Models.GateInDetailEditLogRow>();
+            var b = new List<scfs_erp.Models.GateInDetailEditLogRow>();
+            if (cs != null && !string.IsNullOrWhiteSpace(cs.ConnectionString))
+            {
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                using (var cmd = new SqlCommand(@"SELECT [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
+                                                FROM [dbo].[GateInDetailEditLog]
+                                                WHERE [GIDNO]=@GIDNO AND [Modules]='ExportManualBill' AND (RTRIM(LTRIM([Version]))=@V OR RTRIM(LTRIM([Version]))=@VLower OR RTRIM(LTRIM([Version]))=@VUpper)", sql))
+                {
+                    cmd.Parameters.Add("@GIDNO", System.Data.SqlDbType.NVarChar, 50);
+                    cmd.Parameters.Add("@V", System.Data.SqlDbType.NVarChar, 100);
+                    cmd.Parameters.Add("@VLower", System.Data.SqlDbType.NVarChar, 100);
+                    cmd.Parameters.Add("@VUpper", System.Data.SqlDbType.NVarChar, 100);
+
+                    sql.Open();
+                    cmd.Parameters["@GIDNO"].Value = gidnoString;
+                    cmd.Parameters["@V"].Value = versionA.Trim();
+                    cmd.Parameters["@VLower"].Value = versionA.Trim().ToLower();
+                    cmd.Parameters["@VUpper"].Value = versionA.Trim().ToUpper();
+                    using (var r = cmd.ExecuteReader())
+                    {
+                        while (r.Read())
+                        {
+                            a.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                            {
+                                GIDNO = gidnoString,
+                                FieldName = Convert.ToString(r["FieldName"]),
+                                OldValue = r["OldValue"] == DBNull.Value ? null : Convert.ToString(r["OldValue"]),
+                                NewValue = r["NewValue"] == DBNull.Value ? null : Convert.ToString(r["NewValue"]),
+                                ChangedBy = Convert.ToString(r["ChangedBy"]),
+                                ChangedOn = r["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r["ChangedOn"]) : DateTime.MinValue,
+                                Version = versionA,
+                                Modules = Convert.ToString(r["Modules"])
+                            });
+                        }
+                    }
+
+                    cmd.Parameters["@V"].Value = versionB.Trim();
+                    cmd.Parameters["@VLower"].Value = versionB.Trim().ToLower();
+                    cmd.Parameters["@VUpper"].Value = versionB.Trim().ToUpper();
+                    using (var r2 = cmd.ExecuteReader())
+                    {
+                        while (r2.Read())
+                        {
+                            b.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                            {
+                                GIDNO = gidnoString,
+                                FieldName = Convert.ToString(r2["FieldName"]),
+                                OldValue = r2["OldValue"] == DBNull.Value ? null : Convert.ToString(r2["OldValue"]),
+                                NewValue = r2["NewValue"] == DBNull.Value ? null : Convert.ToString(r2["NewValue"]),
+                                ChangedBy = Convert.ToString(r2["ChangedBy"]),
+                                ChangedOn = r2["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r2["ChangedOn"]) : DateTime.MinValue,
+                                Version = versionB,
+                                Modules = Convert.ToString(r2["Modules"])
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Map values
+            try
+            {
+                var dictBank = context.bankmasters.ToDictionary(x => x.BANKMID, x => x.BANKMDESC);
+                var dictCate = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
+                var dictTariff = context.tariffmasters.ToDictionary(x => x.TARIFFMID, x => x.TARIFFMDESC);
+                var dictMode = context.transactionmodemaster.ToDictionary(x => x.TRANMODE, x => x.TRANMODEDETL);
+
+                var dictState = context.statemasters.ToDictionary(x => x.STATEID, x => x.STATEDESC);
+                var dictTallyCHA = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
+                var dictTallyCate = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
+
+                Func<string, string, string> Map = (field, val) =>
+                {
+                    if (string.IsNullOrWhiteSpace(val)) return val;
+                    try
+                    {
+                        int id = 0;
+                        if (field == "BANKMID" && int.TryParse(val, out id) && dictBank.ContainsKey(id))
+                            return dictBank[id];
+                        if (field == "LCATEID" && int.TryParse(val, out id) && dictCate.ContainsKey(id))
+                            return dictCate[id];
+                        if (field == "CATEAID" && int.TryParse(val, out id) && dictCate.ContainsKey(id))
+                            return dictCate[id];
+                        if (field == "TCATEAID" && int.TryParse(val, out id) && dictTallyCate.ContainsKey(id))
+                            return dictTallyCate[id];
+                        if (field == "TARIFFMID" && int.TryParse(val, out id) && dictTariff.ContainsKey(id))
+                            return dictTariff[id];
+                        if (field == "TRANMODE" && int.TryParse(val, out id) && dictMode.ContainsKey(id))
+                            return dictMode[id];
+                        if (field == "STATEID" && int.TryParse(val, out id) && dictState.ContainsKey(id))
+                            return dictState[id];
+                        if (field == "TSTATEID" && int.TryParse(val, out id) && dictState.ContainsKey(id))
+                            return dictState[id];
+                        if (field == "TRANTALLYCHAID" && int.TryParse(val, out id) && dictTallyCHA.ContainsKey(id))
+                            return dictTallyCHA[id];
+                        if (field == "DISPSTATUS")
+                            return val == "1" ? "CANCELLED" : val == "0" ? "INBOOKS" : val;
+                    }
+                    catch { }
+                    return val;
+                };
+
+                Func<string, string> Friendly = field =>
+                {
+                    var fieldNameMap = GetTransactionFieldDisplayNames();
+                    if (fieldNameMap.ContainsKey(field)) return fieldNameMap[field];
+                    return field.Replace("_", " ").Trim();
+                };
+
+                // Filter out removed fields before processing
+                a = a.Where(row => {
+                    if (row.FieldName == null) return true;
+                    var rowFieldNameA = row.FieldName.Trim();
+                    // Skip removed fields
+                    if (rowFieldNameA.Equals("TRANREFID", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("TRANREFBNAME", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("TRANAMTWRDS", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("TRANLMDATE", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("TRANLSDATE", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("HANDL_SGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("HANDL_CGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("HANDL_SGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("HANDL_CGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("STRG_CGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("STRG_SGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("STRG_SGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("STRG_CGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("HANDL_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("STRG_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("HANDL_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("STRG_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("CHA", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Bank", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Amount in Words", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Lorry Memo Date", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Lorry Slip Date", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Handling SGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Handling CGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Handling SGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Handling CGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Storage CGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Storage SGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Storage SGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Storage CGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Handling Taxable Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Storage Taxable Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Handling HSN Code", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Storage HSN Code", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+                    return true;
+                }).ToList();
+                
+                b = b.Where(row => {
+                    if (row.FieldName == null) return true;
+                    var rowFieldNameB = row.FieldName.Trim();
+                    // Skip removed fields
+                    if (rowFieldNameB.Equals("TRANREFID", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("TRANREFBNAME", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("TRANAMTWRDS", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("TRANLMDATE", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("TRANLSDATE", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("HANDL_SGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("HANDL_CGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("HANDL_SGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("HANDL_CGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("STRG_CGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("STRG_SGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("STRG_SGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("STRG_CGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("HANDL_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("STRG_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("HANDL_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("STRG_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("CHA", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Bank", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Amount in Words", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Lorry Memo Date", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Lorry Slip Date", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Handling SGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Handling CGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Handling SGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Handling CGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Storage CGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Storage SGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Storage SGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Storage CGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Handling Taxable Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Storage Taxable Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Handling HSN Code", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Storage HSN Code", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+                    return true;
+                }).ToList();
+
+                foreach (var row in a)
+                {
+                    row.OldValue = Map(row.FieldName, row.OldValue);
+                    row.NewValue = Map(row.FieldName, row.NewValue);
+                    row.FieldName = Friendly(row.FieldName);
+                }
+                foreach (var row in b)
+                {
+                    row.OldValue = Map(row.FieldName, row.OldValue);
+                    row.NewValue = Map(row.FieldName, row.NewValue);
+                    row.FieldName = Friendly(row.FieldName);
+                }
+            }
+            catch { /* Best-effort mapping */ }
+
+            ViewBag.GIDNO = gidnoString;
+            ViewBag.VersionA = versionA;
+            ViewBag.VersionB = versionB;
+            ViewBag.RowsA = a;
+            ViewBag.RowsB = b;
+            ViewBag.Module = "ExportManualBill";
+            return View("~/Views/ImportGateIn/EditLogGateInCompare.cshtml");
+        }
+
+        private static Dictionary<string, string> GetTransactionFieldDisplayNames()
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                {"TRANDATE", "Date"}, {"TRANTIME", "Date/Time"}, {"TRANDNO", "Bill Number"}, {"TRANNO", "No"},
+                {"TRANREFNAME", "CHA"}, {"BANKMID", "Bank"}, {"LCATEID", "Location Category"},
+                {"TRANMODE", "Mode"}, {"TRANMODEDETL", "Mode Detail"}, {"TRANGAMT", "Gross Amount"}, {"TRANNAMT", "Net Amount"},
+                {"TRANROAMT", "Round Off Amount"}, {"TRANREFAMT", "Amount"}, {"TRANRMKS", "Remarks"},
+                {"TRANCGSTAMT", "C.G.S.T."}, {"TRANSGSTAMT", "S.G.S.T."}, {"TRANIGSTAMT", "I.G.S.T."},
+                {"CATEAID", "Location"}, {"STATEID", "State"}, {"CATEAGSTNO", "GST NO"}, {"REGSTRID", "Tax Type"},
+                {"DISPSTATUS", "Status"}, {"PRCSDATE", "Process Date"},
+                {"TRANBTYPE", "Bill Type"}, {"TRANREFNO", "Number"}, {"TRANREFDATE", "Date"},
+                {"TRANTALLYCHANAME", "Tally CHA"}, {"TCATEAID", "Tally CHA Location"}, 
+                {"TCATEAGSTNO", "Tally CHA GST NO"}, {"TSTATEID", "State"}, {"TRANIMPADDR1", "Address 1"}, 
+                {"TRANIMPADDR2", "Address 2"}, {"TRANIMPADDR3", "Address 3"}, {"TRANIMPADDR4", "Address 4"}
+            };
+        }
+
+        private void LogTransactionEdits(TransactionMaster before, TransactionMaster after, string userId)
+        {
+            if (before == null || after == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"LogTransactionEdits: before={before != null}, after={after != null}");
+                return;
+            }
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (cs == null || string.IsNullOrWhiteSpace(cs.ConnectionString))
+            {
+                System.Diagnostics.Debug.WriteLine("LogTransactionEdits: No SCFSERP_EditLog connection string found");
+                return;
+            }
+
+            var fieldDisplayNames = GetTransactionFieldDisplayNames();
+
+            // Exclude system or noisy fields
+            var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "TRANMID", "COMPYID", "SDPTID", "PRCSDATE", "LMUSRID", "CUSRID",
+                "TRANTID", "TRANPCOUNT", "TRANCSNAME", "LEMID", "TRANAHAMT",
+                "TRANHBLNO", "TRANPONO",
+                "SLABNARN_HANDLDESC", "SLABNARN_ADNLDESC", "SLABNARN_STS",
+                "TALLYSTAT", "IRNNO", "ACKNO", "ACKDT", "QRCODEPATH",
+                "TRANGSTNO", "TRANPAMT",
+                // Removed fields - no longer displayed
+                "TRANREFID", "TRANREFBNAME", "TRANAMTWRDS", "TRANLMDATE", "TRANLSDATE",
+                "HANDL_SGST_AMT", "HANDL_CGST_AMT", "HANDL_SGST_EXPRN", "HANDL_CGST_EXPRN",
+                "STRG_CGST_AMT", "STRG_SGST_AMT", "STRG_SGST_EXPRN", "STRG_CGST_EXPRN",
+                "HANDL_TAXABLE_AMT", "STRG_TAXABLE_AMT", "HANDL_HSNCODE", "STRG_HSNCODE",
+                "TRANTALLYCHAID"  // Tally CHA ID - exclude, only show TRANTALLYCHANAME
+            };
+
+            // Compute the next version ONCE per save
+            var gidno = after.TRANMID.ToString();
+            int nextVersion = 1;
+            try
+            {
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                using (var cmd = new SqlCommand(@"
+                    SELECT ISNULL(
+                        MAX(TRY_CAST(
+                            SUBSTRING([Version], 2, 
+                                CASE WHEN CHARINDEX('-', [Version]) > 0 
+                                     THEN CHARINDEX('-', [Version]) - 2 
+                                     ELSE LEN([Version]) - 1
+                                END
+                            ) AS INT)
+                        ), 0) + 1
+                    FROM [dbo].[GateInDetailEditLog]
+                    WHERE [GIDNO] = @GIDNO AND [Modules] = 'ExportManualBill'", sql))
+                {
+                    cmd.Parameters.AddWithValue("@GIDNO", gidno);
+                    sql.Open();
+                    var obj = cmd.ExecuteScalar();
+                    if (obj != null && obj != DBNull.Value)
+                        nextVersion = Convert.ToInt32(obj);
+                }
+            }
+            catch { /* ignore logging version errors */ }
+
+            var props = typeof(TransactionMaster).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            foreach (var p in props)
+            {
+                if (!p.CanRead) continue;
+                if (p.PropertyType.IsClass && p.PropertyType != typeof(string) && !p.PropertyType.IsValueType)
+                    continue;
+                if (exclude.Contains(p.Name)) continue;
+
+                var ov = p.GetValue(before, null);
+                var nv = p.GetValue(after, null);
+
+                if (BothNull(ov, nv)) continue;
+
+                var type = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+                bool changed;
+
+                if (type == typeof(decimal))
+                {
+                    var d1 = ToNullableDecimal(ov) ?? 0m;
+                    var d2 = ToNullableDecimal(nv) ?? 0m;
+                    if (d1 == 0m && d2 == 0m) continue;
+                    changed = d1 != d2;
+                }
+                else if (type == typeof(double) || type == typeof(float))
+                {
+                    var d1 = Convert.ToDouble(ov ?? 0.0);
+                    var d2 = Convert.ToDouble(nv ?? 0.0);
+                    if (Math.Abs(d1) < 1e-9 && Math.Abs(d2) < 1e-9) continue;
+                    changed = Math.Abs(d1 - d2) > 1e-9;
+                }
+                else if (type == typeof(int) || type == typeof(long) || type == typeof(short))
+                {
+                    var i1 = Convert.ToInt64(ov ?? 0);
+                    var i2 = Convert.ToInt64(nv ?? 0);
+                    if (i1 == 0 && i2 == 0) continue;
+                    changed = i1 != i2;
+                }
+                else if (type == typeof(DateTime))
+                {
+                    var t1 = (ov as DateTime?) ?? default(DateTime);
+                    var t2 = (nv as DateTime?) ?? default(DateTime);
+
+                    if (t1 == default(DateTime) && t2 == default(DateTime)) continue;
+
+                    if (p.Name.Contains("DATE") && !p.Name.Contains("TIME"))
+                    {
+                        changed = t1.Date != t2.Date;
+                    }
+                    else
+                    {
+                        t1 = new DateTime(t1.Year, t1.Month, t1.Day, t1.Hour, t1.Minute, t1.Second);
+                        t2 = new DateTime(t2.Year, t2.Month, t2.Day, t2.Hour, t2.Minute, t2.Second);
+                        changed = t1 != t2;
+                    }
+                }
+                else if (type == typeof(string))
+                {
+                    var s1 = (Convert.ToString(ov) ?? string.Empty).Trim();
+                    var s2 = (Convert.ToString(nv) ?? string.Empty).Trim();
+                    bool def1 = string.IsNullOrEmpty(s1) || s1 == "-" || s1 == "0" || s1 == "0.0" || s1 == "0.00" || s1 == "0.000" || s1 == "0.0000";
+                    bool def2 = string.IsNullOrEmpty(s2) || s2 == "-" || s2 == "0" || s2 == "0.0" || s2 == "0.00" || s2 == "0.000" || s2 == "0.0000";
+                    if (def1 && def2) continue;
+                    changed = !string.Equals(s1, s2, StringComparison.Ordinal);
+                }
+                else
+                {
+                    var s1 = FormatVal(ov);
+                    var s2 = FormatVal(nv);
+                    changed = !string.Equals(s1, s2, StringComparison.Ordinal);
+                }
+
+                if (!changed) continue;
+
+                var os = FormatValForLogging(p.Name, ov);
+                var ns = FormatValForLogging(p.Name, nv);
+
+                var versionLabel = $"V{nextVersion}-{gidno}";
+                
+                System.Diagnostics.Debug.WriteLine($"Logging change: Field={p.Name}, Old={os}, New={ns}, Version={versionLabel}, GIDNO={gidno}");
+                InsertEditLogRow(cs.ConnectionString, gidno, p.Name, os, ns, userId, versionLabel, "ExportManualBill");
+            }
+            
+            System.Diagnostics.Debug.WriteLine($"LogTransactionEdits completed. Total fields processed, changes logged for GIDNO={gidno}");
+        }
+
+        private string FormatValForLogging(string fieldName, object value)
+        {
+            var formattedValue = FormatVal(value);
+            if (string.IsNullOrEmpty(formattedValue)) return formattedValue;
+
+            try
+            {
+                int lookupId;
+                if (fieldName == "BANKMID" && int.TryParse(formattedValue, out lookupId))
+                {
+                    var bank = context.bankmasters.FirstOrDefault(x => x.BANKMID == lookupId);
+                    if (bank != null) return bank.BANKMDESC;
+                }
+                else if (fieldName == "LCATEID" && int.TryParse(formattedValue, out lookupId))
+                {
+                    var cate = context.categorymasters.FirstOrDefault(x => x.CATEID == lookupId);
+                    if (cate != null) return cate.CATENAME;
+                }
+                else if (fieldName == "CATEAID" && int.TryParse(formattedValue, out lookupId))
+                {
+                    var cateAddr = context.categoryaddressdetails.FirstOrDefault(x => x.CATEAID == lookupId);
+                    if (cateAddr != null && !string.IsNullOrEmpty(cateAddr.CATEATYPEDESC)) return cateAddr.CATEATYPEDESC;
+                }
+                else if (fieldName == "TCATEAID" && int.TryParse(formattedValue, out lookupId))
+                {
+                    var cateAddr = context.categoryaddressdetails.FirstOrDefault(x => x.CATEAID == lookupId);
+                    if (cateAddr != null && !string.IsNullOrEmpty(cateAddr.CATEATYPEDESC)) return cateAddr.CATEATYPEDESC;
+                }
+                else if (fieldName == "TARIFFMID" && int.TryParse(formattedValue, out lookupId))
+                {
+                    var tariff = context.tariffmasters.FirstOrDefault(x => x.TARIFFMID == lookupId);
+                    if (tariff != null) return tariff.TARIFFMDESC;
+                }
+                else if (fieldName == "TRANMODE" && int.TryParse(formattedValue, out lookupId))
+                {
+                    var mode = context.transactionmodemaster.FirstOrDefault(x => x.TRANMODE == lookupId);
+                    if (mode != null) return mode.TRANMODEDETL;
+                }
+            }
+            catch { }
+
+            return formattedValue;
+        }
+
+        private static string FormatVal(object v)
+        {
+            if (v == null || v == DBNull.Value) return string.Empty;
+            if (v is DateTime dt) return dt.ToString("yyyy-MM-dd HH:mm:ss");
+            return Convert.ToString(v);
+        }
+
+        private static bool BothNull(object a, object b)
+        {
+            return (a == null || a == DBNull.Value) && (b == null || b == DBNull.Value);
+        }
+
+        private static decimal? ToNullableDecimal(object v)
+        {
+            if (v == null || v == DBNull.Value) return null;
+            if (decimal.TryParse(Convert.ToString(v), out decimal d)) return d;
+            return null;
+        }
+
+        private static void InsertEditLogRow(string connectionString, string gidno, string fieldName, string oldValue, string newValue, string changedBy, string versionLabel, string modules)
+        {
+            try
+            {
+                using (var sql = new SqlConnection(connectionString))
+                {
+                    sql.Open();
+                    using (var cmd = new SqlCommand(@"
+                        INSERT INTO [dbo].[GateInDetailEditLog] ([GIDNO], [FieldName], [OldValue], [NewValue], [ChangedBy], [ChangedOn], [Version], [Modules])
+                        VALUES (@GIDNO, @FieldName, @OldValue, @NewValue, @ChangedBy, GETDATE(), @Version, @Modules)", sql))
+                    {
+                        cmd.Parameters.AddWithValue("@GIDNO", gidno ?? (object)DBNull.Value);
+                        cmd.Parameters.AddWithValue("@FieldName", fieldName ?? (object)DBNull.Value);
+                        cmd.Parameters.AddWithValue("@OldValue", string.IsNullOrEmpty(oldValue) ? (object)DBNull.Value : oldValue);
+                        cmd.Parameters.AddWithValue("@NewValue", string.IsNullOrEmpty(newValue) ? (object)DBNull.Value : newValue);
+                        cmd.Parameters.AddWithValue("@ChangedBy", string.IsNullOrEmpty(changedBy) ? (object)DBNull.Value : changedBy);
+                        cmd.Parameters.AddWithValue("@Version", versionLabel ?? (object)DBNull.Value);
+                        cmd.Parameters.AddWithValue("@Modules", modules ?? (object)DBNull.Value);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"InsertEditLogRow failed: {ex.Message}");
+            }
+        }
+
+        private void EnsureBaselineVersionZero(TransactionMaster snapshot, string userId)
+        {
+            if (snapshot == null) return;
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (cs == null || string.IsNullOrWhiteSpace(cs.ConnectionString)) return;
+
+            var gidno = snapshot.TRANMID.ToString();
+            var baselineVer = "v0-" + gidno;
+
+            // Check if baseline already exists
+            try
+            {
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                {
+                    sql.Open();
+                    using (var cmd = new SqlCommand(@"SELECT COUNT(*) FROM [dbo].[GateInDetailEditLog] 
+                                                    WHERE [GIDNO] = @GIDNO AND [Modules] = 'ExportManualBill' 
+                                                    AND RTRIM(LTRIM([Version])) = @V", sql))
+                    {
+                        cmd.Parameters.AddWithValue("@GIDNO", gidno);
+                        cmd.Parameters.AddWithValue("@V", baselineVer);
+                        var exists = Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+                        if (exists) return; // Baseline already exists
+                    }
+                }
+            }
+            catch { return; }
+
+            InsertBaselineSnapshot(snapshot, userId, cs.ConnectionString, gidno, baselineVer);
+        }
+
+        private void InsertBaselineSnapshot(TransactionMaster snapshot, string userId, string connectionString, string gidno, string baselineVer)
+        {
+            var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "TRANMID", "COMPYID", "SDPTID", "PRCSDATE", "LMUSRID", "CUSRID",
+                "TRANTID", "TRANPCOUNT", "TRANCSNAME", "LEMID", "TRANAHAMT",
+                "TRANHBLNO", "TRANPONO", "TRANIMPADDR1", "TRANIMPADDR2", "TRANIMPADDR3", "TRANIMPADDR4",
+                "SLABNARN_HANDLDESC", "SLABNARN_ADNLDESC", "SLABNARN_STS",
+                "TRANTALLYCHAID", "TRANTALLYCHANAME", "TCATEAID", "TCATEAGSTNO", "TSTATEID",
+                "TALLYSTAT", "IRNNO", "ACKNO", "ACKDT", "QRCODEPATH", "CATEAID", "STATEID", "CATEAGSTNO",
+                "TRANGSTNO", "TRANPAMT"
+            };
+
+            var props = typeof(TransactionMaster).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            foreach (var p in props)
+            {
+                if (!p.CanRead) continue;
+                if (p.PropertyType.IsClass && p.PropertyType != typeof(string) && !p.PropertyType.IsValueType) continue;
+                if (exclude.Contains(p.Name)) continue;
+
+                var valObj = p.GetValue(snapshot, null);
+                var type = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+
+                if (type == typeof(string))
+                {
+                    var s = (Convert.ToString(valObj) ?? string.Empty).Trim();
+                    bool isDefault = string.IsNullOrEmpty(s) || s == "-" || s == "0" || s == "0.0" || s == "0.00" || s == "0.000" || s == "0.0000";
+                    if (isDefault) continue;
+                }
+                else if (type == typeof(int) || type == typeof(long) || type == typeof(short))
+                {
+                    var i = Convert.ToInt64(valObj ?? 0);
+                    if (i == 0) continue;
+                }
+                else if (type == typeof(decimal))
+                {
+                    var d = ToNullableDecimal(valObj) ?? 0m;
+                    if (d == 0m) continue;
+                }
+                else if (type == typeof(double) || type == typeof(float))
+                {
+                    var d = Convert.ToDouble(valObj ?? 0.0);
+                    if (Math.Abs(d) < 1e-9) continue;
+                }
+
+                var newVal = FormatValForLogging(p.Name, valObj);
+                InsertEditLogRow(connectionString, gidno, p.Name, null, newVal, userId, baselineVer, "ExportManualBill");
+            }
+        }
+        #endregion
     }//----------End of Class
 }//-------------End of namespace
