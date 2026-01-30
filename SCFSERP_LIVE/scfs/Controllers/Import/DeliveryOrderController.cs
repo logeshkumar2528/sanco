@@ -424,5 +424,117 @@ namespace scfs_erp.Controllers.Import
             else
                 Response.Write(temp);
         }//..End of delete
+
+        #region Edit Log Methods
+        public ActionResult EditLogDeliveryOrder(int? domid, DateTime? from = null, DateTime? to = null, string user = null, string fieldName = null, string version = null)
+        {
+            if (Convert.ToInt32(Session["compyid"]) == 0) { return RedirectToAction("Login", "Account"); }
+
+            var list = new List<scfs_erp.Models.GateInDetailEditLogRow>();
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (cs != null && !string.IsNullOrWhiteSpace(cs.ConnectionString))
+            {
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                {
+                    sql.Open();
+                    string query = @"SELECT TOP 2000 [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
+                                    FROM [dbo].[GateInDetailEditLog]
+                                    WHERE [Modules] = 'DeliveryOrder'";
+                    
+                    if (domid.HasValue)
+                    {
+                        // Find DONO from DOMID
+                        var deliveryOrderRecord = context.DeliveryOrderMasters.AsNoTracking().FirstOrDefault(x => x.DOMID == domid.Value);
+                        if (deliveryOrderRecord != null && deliveryOrderRecord.DONO > 0)
+                        {
+                            query += " AND [GIDNO] = @DONO";
+                        }
+                        else
+                        {
+                            query += " AND CAST([GIDNO] AS INT) = @DOMID";
+                        }
+                    }
+
+                    if (from.HasValue)
+                        query += " AND [ChangedOn] >= @FROM";
+                    if (to.HasValue)
+                        query += " AND [ChangedOn] < DATEADD(day, 1, @TO)";
+                    if (!string.IsNullOrWhiteSpace(user))
+                        query += " AND [ChangedBy] LIKE @USERPAT";
+                    if (!string.IsNullOrWhiteSpace(fieldName))
+                        query += " AND [FieldName] LIKE @FIELDPAT";
+                    if (!string.IsNullOrWhiteSpace(version))
+                        query += " AND [Version] LIKE @VERPAT";
+
+                    query += " AND NOT (RTRIM(LTRIM([Version])) IN ('0','V0') OR LEFT(RTRIM(LTRIM([Version])),3) IN ('v0-','V0-'))";
+                    query += " ORDER BY [ChangedOn] DESC, [Version] DESC, [FieldName]";
+
+                    using (var cmd = new SqlCommand(query, sql))
+                    {
+                        if (domid.HasValue)
+                        {
+                            var deliveryOrderRecord = context.DeliveryOrderMasters.AsNoTracking().FirstOrDefault(x => x.DOMID == domid.Value);
+                            if (deliveryOrderRecord != null && deliveryOrderRecord.DONO > 0)
+                            {
+                                cmd.Parameters.AddWithValue("@DONO", deliveryOrderRecord.DONO.ToString());
+                            }
+                            else
+                            {
+                                cmd.Parameters.AddWithValue("@DOMID", domid.Value);
+                            }
+                        }
+                        if (from.HasValue)
+                            cmd.Parameters.AddWithValue("@FROM", from.Value);
+                        if (to.HasValue)
+                            cmd.Parameters.AddWithValue("@TO", to.Value);
+                        if (!string.IsNullOrWhiteSpace(user))
+                            cmd.Parameters.AddWithValue("@USERPAT", "%" + user + "%");
+                        if (!string.IsNullOrWhiteSpace(fieldName))
+                            cmd.Parameters.AddWithValue("@FIELDPAT", "%" + fieldName + "%");
+                        if (!string.IsNullOrWhiteSpace(version))
+                            cmd.Parameters.AddWithValue("@VERPAT", "%" + version + "%");
+
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                list.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                                {
+                                    GIDNO = reader["GIDNO"]?.ToString() ?? "",
+                                    FieldName = reader["FieldName"]?.ToString() ?? "",
+                                    OldValue = reader["OldValue"]?.ToString() ?? "",
+                                    NewValue = reader["NewValue"]?.ToString() ?? "",
+                                    ChangedBy = reader["ChangedBy"]?.ToString() ?? "",
+                                    ChangedOn = reader["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(reader["ChangedOn"]) : DateTime.MinValue,
+                                    Version = reader["Version"]?.ToString() ?? "",
+                                    Modules = reader["Modules"]?.ToString() ?? ""
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Apply friendly name mappings
+            try
+            {
+                Func<string, string> Friendly = field =>
+                {
+                    if (string.IsNullOrWhiteSpace(field)) return field;
+                    // Add field name mappings for DeliveryOrder if needed
+                    return field.Replace("_", " ").Trim();
+                };
+
+                foreach (var row in list)
+                {
+                    row.FieldName = Friendly(row.FieldName);
+                }
+            }
+            catch { /* Best-effort mapping */ }
+
+            ViewBag.Module = "DeliveryOrder";
+            return View("~/Views/ImportGateIn/EditLogGateIn.cshtml", list);
+        }
+        #endregion
     }
 }
