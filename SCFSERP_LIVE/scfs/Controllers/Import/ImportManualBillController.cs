@@ -1134,6 +1134,12 @@ namespace scfs_erp.Controllers.Import
                         string DELIDS = "";
                         //-----End
 
+                        // Capture BEFORE state for edit logging
+                        TransactionMaster original = null;
+                        if (TRANMID != 0)
+                        {
+                            original = context.transactionmaster.AsNoTracking().FirstOrDefault(x => x.TRANMID == TRANMID);
+                        }
 
                         if (TRANMID != 0)
                         {
@@ -1541,6 +1547,44 @@ namespace scfs_erp.Controllers.Import
                         TRANMID = transactionmaster.TRANMID;
 
                         context.Database.ExecuteSqlCommand("EXEC PR_IMPORT_MANUAL_BILL_TRANMASTER_UPD @PTRANMID =" + TRANMID);
+                        
+                        // Log changes to GateInDetailEditLog after successful save
+                        try
+                        {
+                            if (TRANMID != 0 && original != null)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"ORIGINAL RECORD FOUND: TRANMID={original.TRANMID}, calling LogTransactionEdits");
+                                
+                                // Ensure baseline snapshot (Version = "0") exists for this record before logging diffs
+                                EnsureBaselineVersionZero(original, Session["CUSRID"] != null ? Session["CUSRID"].ToString() : "");
+                                
+                                // Reload the saved record to get the final state (after transaction commit)
+                                using (var logContext = new SCFSERPContext())
+                                {
+                                    var savedRecord = logContext.transactionmaster.AsNoTracking().FirstOrDefault(x => x.TRANMID == TRANMID);
+                                    if (savedRecord != null)
+                                    {
+                                        LogTransactionEdits(original, savedRecord, Session["CUSRID"] != null ? Session["CUSRID"].ToString() : "");
+                                        System.Diagnostics.Debug.WriteLine($"LogTransactionEdits completed successfully");
+                                    }
+                                    else
+                                    {
+                                        System.Diagnostics.Debug.WriteLine($"SAVED RECORD NOT FOUND after commit for TRANMID={transactionmaster.TRANMID}");
+                                    }
+                                }
+                            }
+                            else if (TRANMID != 0 && original == null)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"ORIGINAL RECORD NOT FOUND for TRANMID={transactionmaster.TRANMID}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            // Log the error for debugging - don't fail the save if logging fails
+                            System.Diagnostics.Debug.WriteLine($"Edit logging failed: {ex.Message}");
+                            System.Diagnostics.Debug.WriteLine($"Stack trace: {ex.StackTrace}");
+                        }
+                        
                         Response.Redirect("Index");
                     }
                     catch (Exception)
