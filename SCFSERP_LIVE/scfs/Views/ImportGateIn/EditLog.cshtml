@@ -7,10 +7,18 @@
     <div class="row">
         <div class="col-md-12">
             <h2 class="page-header">Edit log</h2>
-            <p class="text-muted">Choose a module to view the edit history. Start with Gate In.</p>
+            <p class="text-muted">Choose a module to view the edit history. Modules are organized by category.</p>
         </div>
     </div>
 
+    <!-- Gate In Operations -->
+    <div class="row">
+        <div class="col-md-12">
+            <h3 style="margin-top: 20px; margin-bottom: 15px; color: #333; border-bottom: 2px solid #337ab7; padding-bottom: 5px;">
+                <i class="fa fa-sign-in"></i> Gate In Operations
+            </h3>
+        </div>
+    </div>
     <div class="row">
         <div class="col-sm-6 col-md-4">
             <div class="panel panel-primary">
@@ -70,25 +78,6 @@
             </div>
         </div>
         <div class="col-sm-6 col-md-4">
-            <div class="panel panel-warning">
-                <div class="panel-heading">
-                    <h3 class="panel-title"><i class="fa fa-ticket"></i> Vehicle Ticket Import</h3>
-                </div>
-                <div class="panel-body">
-                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Vehicle Ticket Import operations, including field-wise old and new values, who changed it, and when.</p>
-                    <form method="get" action="@Url.Action("EditLogVehicleTicket", "ImportVehicleTicket")" class="form-inline" role="form">
-                        <div class="form-group">
-                            <label for="vt_vtdid" class="control-label">Filter by VTDID (optional)</label>
-                            <input type="number" min="1" class="form-control" id="vt_vtdid" name="vtdid" placeholder="e.g. 222394" />
-                        </div>
-                        <button type="submit" class="btn btn-warning btn-lg">
-                            <i class="fa fa-ticket"></i> Vehicle Ticket
-                        </button>
-                    </form>
-                </div>
-            </div>
-        </div>
-        <div class="col-sm-6 col-md-4">
             <div class="panel panel-danger">
                 <div class="panel-heading">
                     <h3 class="panel-title"><i class="fa fa-export"></i> ExBond GateIn Detail</h3>
@@ -102,6 +91,36 @@
                         </div>
                         <button type="submit" class="btn btn-danger btn-lg">
                             <i class="fa fa-export"></i> ExBond GateIn
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vehicle Operations -->
+    <div class="row">
+        <div class="col-md-12">
+            <h3 style="margin-top: 20px; margin-bottom: 15px; color: #333; border-bottom: 2px solid #f0ad4e; padding-bottom: 5px;">
+                <i class="fa fa-truck"></i> Vehicle Operations
+            </h3>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-warning">
+                <div class="panel-heading">
+                    <h3 class="panel-title"><i class="fa fa-ticket"></i> Vehicle Ticket Import</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Vehicle Ticket Import operations, including field-wise old and new values, who changed it, and when.</p>
+                    <form method="get" action="@Url.Action("EditLogVehicleTicket", "ImportVehicleTicket")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="vt_vtdid" class="control-label">Filter by VTDID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="vt_vtdid" name="vtdid" placeholder="e.g. 222394" />
+                        </div>
+                        <button type="submit" class="btn btn-warning btn-lg">
+                            <i class="fa fa-ticket"></i> Vehicle Ticket
                         </button>
                     </form>
                 </div>
@@ -126,6 +145,36 @@
                 </div>
             </div>
         </div>
+        <div class="col-sm-6 col-md-4">
+            <div class="panel panel-warning">
+                <div class="panel-heading">
+                    <h3 class="panel-title"><i class="fa fa-truck"></i> Import Truck Out</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Import Truck Out operations, including field-wise old and new values, who changed it, and when.</p>
+                    <form method="get" action="@Url.Action("EditLogTruckOut", "ImportTruckOut")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="truckout_godid" class="control-label">Filter by GODID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="truckout_godid" name="godid" placeholder="e.g. 12345" />
+                        </div>
+                        <button type="submit" class="btn btn-warning btn-lg">
+                            <i class="fa fa-truck"></i> Import Truck Out
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load/Unload Operations -->
+    <div class="row">
+        <div class="col-md-12">
+            <h3 style="margin-top: 20px; margin-bottom: 15px; color: #333; border-bottom: 2px solid #5cb85c; padding-bottom: 5px;">
+                <i class="fa fa-archive"></i> Load/Unload Operations
+            </h3>
+        </div>
+    </div>
+    <div class="row">
         <div class="col-sm-6 col-md-4">
             <div class="panel panel-primary">
                 <div class="panel-heading">
@@ -183,25 +232,17 @@
                 </div>
             </div>
         </div>
-        <div class="col-sm-6 col-md-4">
-            <div class="panel panel-warning">
-                <div class="panel-heading">
-                    <h3 class="panel-title"><i class="fa fa-truck"></i> Import Truck Out</h3>
-                </div>
-                <div class="panel-body">
-                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Import Truck Out operations, including field-wise old and new values, who changed it, and when.</p>
-                    <form method="get" action="@Url.Action("EditLogTruckOut", "ImportTruckOut")" class="form-inline" role="form">
-                        <div class="form-group">
-                            <label for="truckout_godid" class="control-label">Filter by GODID (optional)</label>
-                            <input type="number" min="1" class="form-control" id="truckout_godid" name="godid" placeholder="e.g. 12345" />
-                        </div>
-                        <button type="submit" class="btn btn-warning btn-lg">
-                            <i class="fa fa-truck"></i> Import Truck Out
-                        </button>
-                    </form>
-                </div>
-            </div>
+    </div>
+
+    <!-- Billing Operations -->
+    <div class="row">
+        <div class="col-md-12">
+            <h3 style="margin-top: 20px; margin-bottom: 15px; color: #333; border-bottom: 2px solid #9b59b6; padding-bottom: 5px;">
+                <i class="fa fa-file-invoice"></i> Billing Operations
+            </h3>
         </div>
+    </div>
+    <div class="row">
         <div class="col-sm-6 col-md-4">
             <div class="panel panel-default" style="border-color: #5bc0de;">
                 <div class="panel-heading" style="background-color: #5bc0de; color: white;">
@@ -278,6 +319,17 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Stuffing Operations -->
+    <div class="row">
+        <div class="col-md-12">
+            <h3 style="margin-top: 20px; margin-bottom: 15px; color: #333; border-bottom: 2px solid #16a085; padding-bottom: 5px;">
+                <i class="fa fa-box"></i> Stuffing Operations
+            </h3>
+        </div>
+    </div>
+    <div class="row">
         <div class="col-sm-6 col-md-4">
             <div class="panel panel-default" style="border-color: #16a085;">
                 <div class="panel-heading" style="background-color: #16a085; color: white;">
