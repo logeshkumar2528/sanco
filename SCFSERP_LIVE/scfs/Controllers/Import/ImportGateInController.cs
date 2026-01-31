@@ -1661,9 +1661,9 @@ namespace scfs_erp.Controllers.Import
                 return RedirectToAction("EditLogGateIn", new { gidid = gidid });
             }
 
-            // Normalize version strings (trim whitespace) and support baseline shortcuts
-            versionA = (versionA ?? string.Empty).Trim();
-            versionB = (versionB ?? string.Empty).Trim();
+            // Normalize version strings (trim whitespace including tabs) and support baseline shortcuts
+            versionA = (versionA ?? string.Empty).Trim().Replace("\t", "").Replace("\r", "").Replace("\n", "");
+            versionB = (versionB ?? string.Empty).Trim().Replace("\t", "").Replace("\r", "").Replace("\n", "");
             // Map '0' or 'v0'/'V0' to 'v0-<GIDNO>' for baseline comparisons
             string gidnoString = gidid.Value.ToString();
             try
@@ -1675,6 +1675,30 @@ namespace scfs_erp.Controllers.Import
                 }
             }
             catch { /* fallback to gidid.Value.ToString() */ }
+
+            // Also try to get the actual GIDNO format from the edit log table (it might have leading zeros)
+            var csCheck = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (csCheck != null && !string.IsNullOrWhiteSpace(csCheck.ConnectionString))
+            {
+                try
+                {
+                    using (var sqlCheck = new SqlConnection(csCheck.ConnectionString))
+                    using (var cmdCheck = new SqlCommand(@"SELECT TOP 1 [GIDNO] FROM [dbo].[GateInDetailEditLog] 
+                                                          WHERE (CAST([GIDNO] AS NVARCHAR(50))=@GIDNO_STR OR CAST([GIDNO] AS NVARCHAR(50))=CAST(@GIDNO AS NVARCHAR(50))) 
+                                                          AND [Modules]='ImportGateIn'", sqlCheck))
+                    {
+                        cmdCheck.Parameters.AddWithValue("@GIDNO", gidid.Value);
+                        cmdCheck.Parameters.AddWithValue("@GIDNO_STR", gidnoString);
+                        sqlCheck.Open();
+                        var result = cmdCheck.ExecuteScalar();
+                        if (result != null && result != DBNull.Value)
+                        {
+                            gidnoString = result.ToString();
+                        }
+                    }
+                }
+                catch { /* fallback to previous gidnoString */ }
+            }
 
             if (gidid.HasValue)
             {
@@ -1693,7 +1717,7 @@ namespace scfs_erp.Controllers.Import
                 using (var sql = new SqlConnection(cs.ConnectionString))
                 using (var cmd = new SqlCommand(@"SELECT [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
                                                 FROM [dbo].[GateInDetailEditLog]
-                                                WHERE (CAST([GIDNO] AS NVARCHAR(50))=@GIDNO_STR OR CAST([GIDNO] AS NVARCHAR(50))=CAST(@GIDNO AS NVARCHAR(50))) AND RTRIM(LTRIM([Version]))=@V AND [Modules]='ImportGateIn'", sql))
+                                                WHERE (CAST([GIDNO] AS NVARCHAR(50))=@GIDNO_STR OR CAST([GIDNO] AS NVARCHAR(50))=CAST(@GIDNO AS NVARCHAR(50))) AND RTRIM(LTRIM([Version]))=RTRIM(LTRIM(@V)) AND [Modules]='ImportGateIn'", sql))
                 {
                     cmd.Parameters.Add("@GIDNO", System.Data.SqlDbType.Int);
                     cmd.Parameters.Add("@GIDNO_STR", System.Data.SqlDbType.NVarChar, 50);
@@ -1702,7 +1726,8 @@ namespace scfs_erp.Controllers.Import
                     sql.Open();
                     cmd.Parameters["@GIDNO"].Value = gidid.Value;
                     cmd.Parameters["@GIDNO_STR"].Value = gidnoString;
-                    cmd.Parameters["@V"].Value = versionA.Trim();
+                    var versionAClean = versionA.Trim().Replace("\t", "").Replace("\r", "").Replace("\n", "");
+                    cmd.Parameters["@V"].Value = versionAClean;
                     using (var r = cmd.ExecuteReader())
                     {
                         while (r.Read())
@@ -1721,7 +1746,8 @@ namespace scfs_erp.Controllers.Import
                         }
                     }
 
-                    cmd.Parameters["@V"].Value = versionB.Trim();
+                    var versionBClean = versionB.Trim().Replace("\t", "").Replace("\r", "").Replace("\n", "");
+                    cmd.Parameters["@V"].Value = versionBClean;
                     using (var r2 = cmd.ExecuteReader())
                     {
                         while (r2.Read())
@@ -1876,8 +1902,9 @@ namespace scfs_erp.Controllers.Import
             ViewBag.VersionB = versionB;
             ViewBag.RowsA = a;
             ViewBag.RowsB = b;
+            ViewBag.Module = "ImportGateIn";
 
-            return View();
+            return View("~/Views/ImportGateIn/EditLogGateInCompare.cshtml");
         }
 
         public ActionResult EditLogGateInExBond(int? gidid, DateTime? from = null, DateTime? to = null, string user = null, string fieldName = null, string version = null)

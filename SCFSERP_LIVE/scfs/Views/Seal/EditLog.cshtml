@@ -1,0 +1,37 @@
+@{
+    ViewBag.Title = "Seal - Edit log";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <h2 class="page-header">Seal - Edit log</h2>
+            <p class="text-muted">View edit history for Seal records. You can filter by STFMID or view all changes.</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="panel panel-default" style="border-color: #f39c12;">
+                <div class="panel-heading" style="background-color: #f39c12; color: white;">
+                    <h3 class="panel-title"><i class="fa fa-lock"></i> Seal Edit Log</h3>
+                </div>
+                <div class="panel-body">
+                    <p>View changes captured in <strong>GateInDetailEditLog</strong> for Seal operations, including field-wise old and new values, who changed it, and when. Values are shown by version.</p>
+                    <form method="get" action="@Url.Action("EditLogSeal", "Seal")" class="form-inline" role="form">
+                        <div class="form-group">
+                            <label for="seal_stfmid" class="control-label">Filter by STFMID (optional)</label>
+                            <input type="number" min="1" class="form-control" id="seal_stfmid" name="stfmid" placeholder="e.g. 12345" />
+                        </div>
+                        <button type="submit" class="btn btn-lg" style="background-color: #f39c12; color: white; border-color: #e67e22;">
+                            <i class="fa fa-lock"></i> View Edit Log
+                        </button>
+                    </form>
+                    <hr />
+                    <p><strong>Or</strong> go back to the <a href="@Url.Action("Index", "Seal")">Seal Index</a> page.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
