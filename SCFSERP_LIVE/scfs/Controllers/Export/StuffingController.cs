@@ -1,4 +1,4 @@
-﻿using CrystalDecisions.CrystalReports.Engine;
+using CrystalDecisions.CrystalReports.Engine;
 using CrystalDecisions.Shared;
 using scfs_erp.Context;
 using scfs_erp.Helper;
@@ -9,6 +9,7 @@ using System.Configuration;
 using System.Data.Entity.Infrastructure;
 using System.Data.SqlClient;
 using System.Linq;
+using System.Reflection;
 using System.Web;
 using System.Web.Mvc;
 using scfs;
@@ -283,9 +284,20 @@ namespace scfs_erp.Controllers
                         string DELIDS = "";
                         string P_DELIDS = "";//.....End
 
+                        // Capture before state for edit logging
+                        StuffingMaster before = null;
                         if (STFMID != 0)//Getting Primary id in Edit mode
                         {
                             stuffingmaster = context.stuffingmasters.Find(STFMID);
+                            try
+                            {
+                                before = context.stuffingmasters.AsNoTracking().FirstOrDefault(x => x.STFMID == STFMID);
+                                if (before != null)
+                                {
+                                    EnsureBaselineVersionZero(before, Session["CUSRID"]?.ToString() ?? "");
+                                }
+                            }
+                            catch { /* ignore if baseline creation fails */ }
                         }
                         //........................Stuffing Master..............//
 
@@ -571,8 +583,36 @@ namespace scfs_erp.Controllers
                         //   }
 
                         context.Database.ExecuteSqlCommand("DELETE FROM stuffingproductdetail  WHERE STFDID IN(" + DELIDS.Substring(1) + ") and  STFPID NOT IN(" + P_DELIDS.Substring(1) + ")");
-                        context.Database.ExecuteSqlCommand("DELETE FROM stuffingdetail  WHERE STFMID=" + STFMID + " and  STFDID NOT IN(" + DELIDS.Substring(1) + ")");
+                        context.Database.ExecuteSqlCommand("DELETE FROM stuffingdetail  WHERE STFMID=" + stuffingmaster.STFMID + " and  STFDID NOT IN(" + DELIDS.Substring(1) + ")");
                         context.Database.ExecuteSqlCommand("DELETE FROM TMP_STUFFING_SBDID WHERE KUSRID='" + Session["CUSRID"] + "'");
+                        
+                        // Log changes after successful save (before commit)
+                        if (before != null && stuffingmaster.STFMID != 0)
+                        {
+                            try
+                            {
+                                var after = context.stuffingmasters.AsNoTracking().FirstOrDefault(x => x.STFMID == stuffingmaster.STFMID);
+                                if (after != null)
+                                {
+                                    LogStuffingEdits(before, after, Session["CUSRID"]?.ToString() ?? "");
+                                }
+                            }
+                            catch { /* ignore logging errors */ }
+                        }
+                        else if (STFMID == 0 && stuffingmaster.STFMID != 0)
+                        {
+                            // Create baseline for new record
+                            try
+                            {
+                                var newRecord = context.stuffingmasters.AsNoTracking().FirstOrDefault(x => x.STFMID == stuffingmaster.STFMID);
+                                if (newRecord != null)
+                                {
+                                    EnsureBaselineVersionZero(newRecord, Session["CUSRID"]?.ToString() ?? "");
+                                }
+                            }
+                            catch { /* ignore baseline creation errors */ }
+                        }
+                        
                         trans.Commit(); Response.Redirect("Index");
                     }
                     catch (Exception ex)
@@ -838,5 +878,490 @@ namespace scfs_erp.Controllers
             else
                 Response.Write(temp);
         }//..End of delete
+
+        // ========================= Edit Log Pages =========================
+        public ActionResult EditLog()
+        {
+            if (Convert.ToInt32(Session["compyid"]) == 0) { return RedirectToAction("Login", "Account"); }
+            return View();
+        }
+
+        public ActionResult EditLogStuffing(int? stfmid, DateTime? from = null, DateTime? to = null, string user = null, string fieldName = null, string version = null)
+        {
+            if (Convert.ToInt32(Session["compyid"]) == 0) { return RedirectToAction("Login", "Account"); }
+
+            var list = new List<scfs_erp.Models.GateInDetailEditLogRow>();
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (cs != null && !string.IsNullOrWhiteSpace(cs.ConnectionString))
+            {
+                string gidnoParam = stfmid.HasValue ? stfmid.Value.ToString() : null;
+                
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                using (var cmd = new SqlCommand(@"SELECT TOP 2000 [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
+                                                FROM [dbo].[GateInDetailEditLog]
+                                                WHERE [Modules] = 'Stuffing'
+                                                  AND (@GIDNO IS NULL OR [GIDNO] = @GIDNO)
+                                                  AND (@FROM IS NULL OR [ChangedOn] >= @FROM)
+                                                  AND (@TO   IS NULL OR [ChangedOn] <  DATEADD(day, 1, @TO))
+                                                  AND (@USER IS NULL OR [ChangedBy] LIKE @USERPAT)
+                                                  AND (@FIELD IS NULL OR [FieldName] LIKE @FIELDPAT)
+                                                  AND (@VERSION IS NULL OR [Version] LIKE @VERPAT)
+                                                  AND NOT (RTRIM(LTRIM([Version])) IN ('0','V0') OR LEFT(RTRIM(LTRIM([Version])),3) IN ('v0-','V0-'))
+                                                ORDER BY [ChangedOn] DESC, [GIDNO] DESC", sql))
+                {
+                    cmd.Parameters.AddWithValue("@GIDNO", string.IsNullOrEmpty(gidnoParam) ? (object)DBNull.Value : gidnoParam);
+                    cmd.Parameters.AddWithValue("@FROM", (object)from ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@TO", (object)to ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@USER", string.IsNullOrWhiteSpace(user) ? (object)DBNull.Value : user);
+                    cmd.Parameters.AddWithValue("@USERPAT", string.IsNullOrWhiteSpace(user) ? (object)DBNull.Value : (object)("%" + user + "%"));
+                    cmd.Parameters.AddWithValue("@FIELD", string.IsNullOrWhiteSpace(fieldName) ? (object)DBNull.Value : fieldName);
+                    cmd.Parameters.AddWithValue("@FIELDPAT", string.IsNullOrWhiteSpace(fieldName) ? (object)DBNull.Value : (object)("%" + fieldName + "%"));
+                    cmd.Parameters.AddWithValue("@VERSION", string.IsNullOrWhiteSpace(version) ? (object)DBNull.Value : version);
+                    cmd.Parameters.AddWithValue("@VERPAT", string.IsNullOrWhiteSpace(version) ? (object)DBNull.Value : (object)("%" + version + "%"));
+                    sql.Open();
+                    using (var r = cmd.ExecuteReader())
+                    {
+                        while (r.Read())
+                        {
+                            list.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                            {
+                                GIDNO = Convert.ToString(r["GIDNO"]),
+                                FieldName = Convert.ToString(r["FieldName"]),
+                                OldValue = r["OldValue"] == DBNull.Value ? null : Convert.ToString(r["OldValue"]),
+                                NewValue = r["NewValue"] == DBNull.Value ? null : Convert.ToString(r["NewValue"]),
+                                ChangedBy = Convert.ToString(r["ChangedBy"]),
+                                ChangedOn = r["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r["ChangedOn"]) : DateTime.MinValue,
+                                Version = r["Version"] == DBNull.Value ? null : Convert.ToString(r["Version"]),
+                                Modules = r["Modules"] == DBNull.Value ? null : Convert.ToString(r["Modules"])
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Map raw DB codes to form-friendly display values
+            try
+            {
+                var dictCate = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
+                var dictEOPT = context.Export_OperationTypeMaster.ToDictionary(x => x.EOPTID, x => x.EOPTDESC);
+                var dictSlab = context.exportslabtypemaster.ToDictionary(x => x.SLABTID, x => x.SLABTDESC);
+
+                Func<string, string, string> Map = (field, val) =>
+                {
+                    if (string.IsNullOrWhiteSpace(val)) return val;
+                    try
+                    {
+                        int id;
+                        if (field == "CHAID" && int.TryParse(val, out id) && dictCate.ContainsKey(id))
+                            return dictCate[id];
+                        if (field == "LCATEID" && int.TryParse(val, out id) && dictCate.ContainsKey(id))
+                            return dictCate[id];
+                        if (field == "STFBILLREFID" && int.TryParse(val, out id) && dictCate.ContainsKey(id))
+                            return dictCate[id];
+                        if (field == "EOPTID" && int.TryParse(val, out id) && dictEOPT.ContainsKey(id))
+                            return dictEOPT[id];
+                        if (field == "SLABTID" && int.TryParse(val, out id) && dictSlab.ContainsKey(id))
+                            return dictSlab[id];
+                    }
+                    catch { }
+                    return val;
+                };
+
+                Func<string, string> Friendly = field =>
+                {
+                    var fieldNameMap = GetStuffingFieldDisplayNames();
+                    if (fieldNameMap.ContainsKey(field)) return fieldNameMap[field];
+                    return field.Replace("_", " ").Trim();
+                };
+
+                foreach (var row in list)
+                {
+                    row.OldValue = Map(row.FieldName, row.OldValue);
+                    row.NewValue = Map(row.FieldName, row.NewValue);
+                    row.FieldName = Friendly(row.FieldName);
+                }
+            }
+            catch { /* Best-effort mapping */ }
+
+            ViewBag.Module = "Stuffing";
+            return View("~/Views/ImportGateIn/EditLogGateIn.cshtml", list);
+        }
+
+        // Compare two versions for a given STFMID
+        public ActionResult EditLogStuffingCompare(int? stfmid, string versionA, string versionB)
+        {
+            if (Convert.ToInt32(Session["compyid"]) == 0) { return RedirectToAction("Login", "Account"); }
+
+            if (stfmid == null || string.IsNullOrWhiteSpace(versionA) || string.IsNullOrWhiteSpace(versionB))
+            {
+                TempData["Err"] = "Please provide STFMID, Version A and Version B to compare.";
+                return RedirectToAction("EditLogStuffing", new { stfmid = stfmid });
+            }
+
+            versionA = (versionA ?? string.Empty).Trim();
+            versionB = (versionB ?? string.Empty).Trim();
+            string gidnoString = stfmid.HasValue ? stfmid.Value.ToString() : "";
+
+            var baseLabel = "v0-" + gidnoString;
+            if (string.Equals(versionA, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionA, "V0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionA, "v0", StringComparison.OrdinalIgnoreCase))
+                versionA = baseLabel;
+            if (string.Equals(versionB, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionB, "V0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionB, "v0", StringComparison.OrdinalIgnoreCase))
+                versionB = baseLabel;
+
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            var a = new List<scfs_erp.Models.GateInDetailEditLogRow>();
+            var b = new List<scfs_erp.Models.GateInDetailEditLogRow>();
+            if (cs != null && !string.IsNullOrWhiteSpace(cs.ConnectionString))
+            {
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                using (var cmd = new SqlCommand(@"SELECT [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
+                                                FROM [dbo].[GateInDetailEditLog]
+                                                WHERE [GIDNO]=@GIDNO AND [Modules]='Stuffing' AND RTRIM(LTRIM([Version]))=@V", sql))
+                {
+                    cmd.Parameters.Add("@GIDNO", System.Data.SqlDbType.NVarChar, 50);
+                    cmd.Parameters.Add("@V", System.Data.SqlDbType.NVarChar, 100);
+
+                    sql.Open();
+                    cmd.Parameters["@GIDNO"].Value = gidnoString;
+                    cmd.Parameters["@V"].Value = versionA.Trim();
+                    using (var r = cmd.ExecuteReader())
+                    {
+                        while (r.Read())
+                        {
+                            a.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                            {
+                                GIDNO = gidnoString,
+                                FieldName = Convert.ToString(r["FieldName"]),
+                                OldValue = r["OldValue"] == DBNull.Value ? null : Convert.ToString(r["OldValue"]),
+                                NewValue = r["NewValue"] == DBNull.Value ? null : Convert.ToString(r["NewValue"]),
+                                ChangedBy = Convert.ToString(r["ChangedBy"]),
+                                ChangedOn = r["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r["ChangedOn"]) : DateTime.MinValue,
+                                Version = versionA,
+                                Modules = Convert.ToString(r["Modules"])
+                            });
+                        }
+                    }
+
+                    cmd.Parameters["@V"].Value = versionB.Trim();
+                    using (var r2 = cmd.ExecuteReader())
+                    {
+                        while (r2.Read())
+                        {
+                            b.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                            {
+                                GIDNO = gidnoString,
+                                FieldName = Convert.ToString(r2["FieldName"]),
+                                OldValue = r2["OldValue"] == DBNull.Value ? null : Convert.ToString(r2["OldValue"]),
+                                NewValue = r2["NewValue"] == DBNull.Value ? null : Convert.ToString(r2["NewValue"]),
+                                ChangedBy = Convert.ToString(r2["ChangedBy"]),
+                                ChangedOn = r2["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r2["ChangedOn"]) : DateTime.MinValue,
+                                Version = versionB,
+                                Modules = Convert.ToString(r2["Modules"])
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Map values
+            try
+            {
+                var dictCate = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
+                var dictEOPT = context.Export_OperationTypeMaster.ToDictionary(x => x.EOPTID, x => x.EOPTDESC);
+                var dictSlab = context.exportslabtypemaster.ToDictionary(x => x.SLABTID, x => x.SLABTDESC);
+
+                Func<string, string, string> Map = (field, val) =>
+                {
+                    if (string.IsNullOrWhiteSpace(val)) return val;
+                    try
+                    {
+                        int id;
+                        if (field == "CHAID" && int.TryParse(val, out id) && dictCate.ContainsKey(id))
+                            return dictCate[id];
+                        if (field == "LCATEID" && int.TryParse(val, out id) && dictCate.ContainsKey(id))
+                            return dictCate[id];
+                        if (field == "STFBILLREFID" && int.TryParse(val, out id) && dictCate.ContainsKey(id))
+                            return dictCate[id];
+                        if (field == "EOPTID" && int.TryParse(val, out id) && dictEOPT.ContainsKey(id))
+                            return dictEOPT[id];
+                        if (field == "SLABTID" && int.TryParse(val, out id) && dictSlab.ContainsKey(id))
+                            return dictSlab[id];
+                    }
+                    catch { }
+                    return val;
+                };
+
+                Func<string, string> Friendly = field =>
+                {
+                    var fieldNameMap = GetStuffingFieldDisplayNames();
+                    if (fieldNameMap.ContainsKey(field)) return fieldNameMap[field];
+                    return field.Replace("_", " ").Trim();
+                };
+
+                foreach (var row in a)
+                {
+                    row.OldValue = Map(row.FieldName, row.OldValue);
+                    row.NewValue = Map(row.FieldName, row.NewValue);
+                    row.FieldName = Friendly(row.FieldName);
+                }
+                foreach (var row in b)
+                {
+                    row.OldValue = Map(row.FieldName, row.OldValue);
+                    row.NewValue = Map(row.FieldName, row.NewValue);
+                    row.FieldName = Friendly(row.FieldName);
+                }
+            }
+            catch { /* Best-effort mapping */ }
+
+            ViewBag.GIDNO = gidnoString;
+            ViewBag.VersionA = versionA;
+            ViewBag.VersionB = versionB;
+            ViewBag.RowsA = a;
+            ViewBag.RowsB = b;
+            ViewBag.Module = "Stuffing";
+            return View("~/Views/ImportGateIn/EditLogGateInCompare.cshtml");
+        }
+
+        private static Dictionary<string, string> GetStuffingFieldDisplayNames()
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                {"STFMDATE", "Date"}, {"STFMTIME", "Date/Time"}, {"STFMDNO", "Stuffing Number"}, {"STFMNO", "No"},
+                {"CHAID", "CHA"}, {"STFMNAME", "Name"}, {"LCATEID", "Labour Category"}, {"LCATENAME", "Labour Category Name"},
+                {"EOPTID", "Operation Type"}, {"SLABTID", "Slab Type"}, {"STFBILLEDTO", "Billed To"},
+                {"STFBILLREFID", "Bill Reference"}, {"STFBILLREFNAME", "Bill Reference Name"},
+                {"STFCATEAID", "Location"}, {"STATEID", "State"}, {"CATEAGSTNO", "GST NO"},
+                {"STF_SBILL_RNO", "Shipping Bill RNO"}, {"STF_FORM13_RNO", "Form 13 RNO"},
+                {"TRANIMPADDR1", "Address 1"}, {"TRANIMPADDR2", "Address 2"}, {"TRANIMPADDR3", "Address 3"}, {"TRANIMPADDR4", "Address 4"},
+                {"STFBCATEAID", "Billed CHA Location"}, {"STFBCHAGSTNO", "Billed CHA GST NO"}, {"STFBCHASTATEID", "Billed CHA State"},
+                {"STFBCHAADDR1", "Billed CHA Address 1"}, {"STFBCHAADDR2", "Billed CHA Address 2"}, {"STFBCHAADDR3", "Billed CHA Address 3"}, {"STFBCHAADDR4", "Billed CHA Address 4"},
+                {"DISPSTATUS", "Status"}, {"PRCSDATE", "Process Date"}, {"CUSRID", "Created By"}, {"LMUSRID", "Last Modified By"}
+            };
+        }
+
+        // ========================= Edit Logging Helper Methods =========================
+        private void LogStuffingEdits(StuffingMaster before, StuffingMaster after, string userId)
+        {
+            if (before == null || after == null) return;
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (cs == null || string.IsNullOrWhiteSpace(cs.ConnectionString)) return;
+
+            var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "STFMID", "COMPYID", "PRCSDATE", "LMUSRID", "CUSRID", "STFTID", "TGID"
+            };
+
+            var gidno = after.STFMID.ToString();
+            int nextVersion = 1;
+            try
+            {
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                using (var cmd = new SqlCommand(@"
+                    SELECT ISNULL(
+                        MAX(TRY_CAST(
+                            SUBSTRING([Version], 2, 
+                                CASE WHEN CHARINDEX('-', [Version]) > 0 
+                                     THEN CHARINDEX('-', [Version]) - 2 
+                                     ELSE LEN([Version]) - 1
+                                END
+                            ) AS INT)
+                        ), 0) + 1
+                    FROM [dbo].[GateInDetailEditLog]
+                    WHERE [GIDNO] = @GIDNO AND [Modules] = 'Stuffing'", sql))
+                {
+                    cmd.Parameters.AddWithValue("@GIDNO", gidno);
+                    sql.Open();
+                    var obj = cmd.ExecuteScalar();
+                    if (obj != null && obj != DBNull.Value)
+                        nextVersion = Convert.ToInt32(obj);
+                }
+            }
+            catch { /* ignore logging version errors */ }
+
+            var versionLabel = $"V{nextVersion}-{gidno}";
+            
+            var props = typeof(StuffingMaster).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            foreach (var p in props)
+            {
+                if (!p.CanRead) continue;
+                if (p.PropertyType.IsClass && p.PropertyType != typeof(string) && !p.PropertyType.IsValueType) continue;
+                if (exclude.Contains(p.Name)) continue;
+
+                var ov = p.GetValue(before, null);
+                var nv = p.GetValue(after, null);
+
+                if (BothNull(ov, nv)) continue;
+
+                var type = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+                bool changed;
+
+                if (type == typeof(decimal))
+                {
+                    var d1 = ToNullableDecimal(ov) ?? 0m;
+                    var d2 = ToNullableDecimal(nv) ?? 0m;
+                    changed = d1 != d2;
+                }
+                else if (type == typeof(int) || type == typeof(long) || type == typeof(short))
+                {
+                    var i1 = Convert.ToInt64(ov ?? 0);
+                    var i2 = Convert.ToInt64(nv ?? 0);
+                    changed = i1 != i2;
+                }
+                else if (type == typeof(DateTime))
+                {
+                    var t1 = ov != null && ov != DBNull.Value ? Convert.ToDateTime(ov) : DateTime.MinValue;
+                    var t2 = nv != null && nv != DBNull.Value ? Convert.ToDateTime(nv) : DateTime.MinValue;
+                    changed = t1 != t2;
+                }
+                else if (type == typeof(bool))
+                {
+                    var b1 = ov != null && ov != DBNull.Value && Convert.ToBoolean(ov);
+                    var b2 = nv != null && nv != DBNull.Value && Convert.ToBoolean(nv);
+                    changed = b1 != b2;
+                }
+                else if (type == typeof(string))
+                {
+                    var s1 = (Convert.ToString(ov) ?? string.Empty).Trim();
+                    var s2 = (Convert.ToString(nv) ?? string.Empty).Trim();
+                    bool def1 = string.IsNullOrEmpty(s1) || s1 == "-" || s1 == "0" || s1 == "0.0" || s1 == "0.00" || s1 == "0.000" || s1 == "0.0000";
+                    bool def2 = string.IsNullOrEmpty(s2) || s2 == "-" || s2 == "0" || s2 == "0.0" || s2 == "0.00" || s2 == "0.000" || s2 == "0.0000";
+                    if (def1 && def2) continue;
+                    changed = !string.Equals(s1, s2, StringComparison.Ordinal);
+                }
+                else
+                {
+                    var s1 = FormatVal(ov);
+                    var s2 = FormatVal(nv);
+                    changed = !string.Equals(s1, s2, StringComparison.Ordinal);
+                }
+
+                if (!changed) continue;
+
+                var os = FormatValForLogging(p.Name, ov);
+                var ns = FormatValForLogging(p.Name, nv);
+
+                InsertEditLogRow(cs.ConnectionString, gidno, p.Name, os, ns, userId, versionLabel, "Stuffing");
+            }
+        }
+
+        private string FormatValForLogging(string fieldName, object value)
+        {
+            var formattedValue = FormatVal(value);
+            if (string.IsNullOrEmpty(formattedValue)) return formattedValue;
+
+            try
+            {
+                int lookupId;
+                if (fieldName == "CHAID" && int.TryParse(formattedValue, out lookupId))
+                {
+                    var cate = context.categorymasters.FirstOrDefault(x => x.CATEID == lookupId);
+                    if (cate != null) return cate.CATENAME;
+                }
+                else if (fieldName == "LCATEID" && int.TryParse(formattedValue, out lookupId))
+                {
+                    var cate = context.categorymasters.FirstOrDefault(x => x.CATEID == lookupId);
+                    if (cate != null) return cate.CATENAME;
+                }
+                else if (fieldName == "STFBILLREFID" && int.TryParse(formattedValue, out lookupId))
+                {
+                    var cate = context.categorymasters.FirstOrDefault(x => x.CATEID == lookupId);
+                    if (cate != null) return cate.CATENAME;
+                }
+                else if (fieldName == "EOPTID" && int.TryParse(formattedValue, out lookupId))
+                {
+                    var eopt = context.Export_OperationTypeMaster.FirstOrDefault(x => x.EOPTID == lookupId);
+                    if (eopt != null) return eopt.EOPTDESC;
+                }
+                else if (fieldName == "SLABTID" && int.TryParse(formattedValue, out lookupId))
+                {
+                    var slab = context.exportslabtypemaster.FirstOrDefault(x => x.SLABTID == lookupId);
+                    if (slab != null) return slab.SLABTDESC;
+                }
+            }
+            catch { }
+
+            return formattedValue;
+        }
+
+        private static string FormatVal(object v)
+        {
+            if (v == null || v == DBNull.Value) return string.Empty;
+            if (v is DateTime dt) return dt.ToString("yyyy-MM-dd HH:mm:ss");
+            return Convert.ToString(v);
+        }
+
+        private static bool BothNull(object a, object b)
+        {
+            return (a == null || a == DBNull.Value) && (b == null || b == DBNull.Value);
+        }
+
+        private static decimal? ToNullableDecimal(object v)
+        {
+            if (v == null || v == DBNull.Value) return null;
+            if (decimal.TryParse(Convert.ToString(v), out decimal d)) return d;
+            return null;
+        }
+
+        private static void InsertEditLogRow(string connectionString, string gidno, string fieldName, string oldValue, string newValue, string changedBy, string versionLabel, string modules)
+        {
+            try
+            {
+                using (var sql = new SqlConnection(connectionString))
+                {
+                    sql.Open();
+                    using (var cmd = new SqlCommand(@"
+                        INSERT INTO [dbo].[GateInDetailEditLog] ([GIDNO], [FieldName], [OldValue], [NewValue], [ChangedBy], [ChangedOn], [Version], [Modules])
+                        VALUES (@GIDNO, @FieldName, @OldValue, @NewValue, @ChangedBy, GETDATE(), @Version, @Modules)", sql))
+                    {
+                        cmd.Parameters.AddWithValue("@GIDNO", gidno ?? (object)DBNull.Value);
+                        cmd.Parameters.AddWithValue("@FieldName", fieldName ?? (object)DBNull.Value);
+                        cmd.Parameters.AddWithValue("@OldValue", string.IsNullOrEmpty(oldValue) ? (object)DBNull.Value : oldValue);
+                        cmd.Parameters.AddWithValue("@NewValue", string.IsNullOrEmpty(newValue) ? (object)DBNull.Value : newValue);
+                        cmd.Parameters.AddWithValue("@ChangedBy", string.IsNullOrEmpty(changedBy) ? (object)DBNull.Value : changedBy);
+                        cmd.Parameters.AddWithValue("@Version", versionLabel ?? (object)DBNull.Value);
+                        cmd.Parameters.AddWithValue("@Modules", modules ?? (object)DBNull.Value);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"InsertEditLogRow failed: {ex.Message}");
+            }
+        }
+
+        private void EnsureBaselineVersionZero(StuffingMaster snapshot, string userId)
+        {
+            if (snapshot == null) return;
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (cs == null || string.IsNullOrWhiteSpace(cs.ConnectionString)) return;
+
+            var gidno = snapshot.STFMID.ToString();
+            var baselineVer = "v0-" + gidno;
+
+            try
+            {
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                {
+                    sql.Open();
+                    using (var cmd = new SqlCommand(@"
+                        IF NOT EXISTS (
+                            SELECT 1 FROM [dbo].[GateInDetailEditLog]
+                            WHERE [GIDNO] = @GIDNO AND [Modules] = 'Stuffing' AND RTRIM(LTRIM([Version])) = @VERSION
+                        )
+                        BEGIN
+                            INSERT INTO [dbo].[GateInDetailEditLog] ([GIDNO], [FieldName], [OldValue], [NewValue], [ChangedBy], [ChangedOn], [Version], [Modules])
+                            SELECT @GIDNO, 'INITIAL', NULL, 'Initial State', @USER, GETDATE(), @VERSION, 'Stuffing'
+                        END", sql))
+                    {
+                        cmd.Parameters.AddWithValue("@GIDNO", gidno);
+                        cmd.Parameters.AddWithValue("@VERSION", baselineVer);
+                        cmd.Parameters.AddWithValue("@USER", userId ?? string.Empty);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch { /* ignore baseline creation errors */ }
+        }
     }//..End of class
 }//..End of namespace

@@ -206,13 +206,10 @@ namespace scfs_erp.Controllers.Import
                         ViewBag.OOCDATE = Convert.ToDateTime(oocdtry[0].OOCDATE).ToString("dd/MM/yyyy");
                 }
                 int ASLDTYPE = 0;
-                if (vm.detaildata[0].GIDID > 0)
+                if (vm.detaildata[0].GIDID > 0 && gitab != null)
                 {
-                    var sqry = context.Database.SqlQuery<GateInDetail>("select *from GateInDetail where GIDID =" + vm.detaildata[0].GIDID).ToList();
-
-                    ViewBag.GPLNO = sqry[0].GPLNO;
-                    ViewBag.IGMNO = sqry[0].IGMNO;
-                   
+                    ViewBag.GPLNO = gitab.GPLNO;
+                    ViewBag.IGMNO = gitab.IGMNO;
                 }
 
 
