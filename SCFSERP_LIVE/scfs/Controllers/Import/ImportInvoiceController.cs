@@ -1001,20 +1001,6 @@ namespace scfs_erp.Controllers.Import
                             //transactionmaster.TRANBILLREFNO = billprfx.ToString();
                             context.Entry(transactionmaster).State = System.Data.Entity.EntityState.Modified;
                             context.SaveChanges();
-                            
-                            // Log changes after successful save
-                            if (before != null)
-                            {
-                                try
-                                {
-                                    var after = context.transactionmaster.AsNoTracking().FirstOrDefault(x => x.TRANMID == transactionmaster.TRANMID);
-                                    if (after != null)
-                                    {
-                                        LogTransactionEdits(before, after, Session["CUSRID"]?.ToString() ?? "");
-                                    }
-                                }
-                                catch { /* ignore logging errors */ }
-                            }
                         }
 
 
