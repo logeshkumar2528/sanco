@@ -705,6 +705,7 @@ namespace scfs_erp.Controllers.Import
 
                         // Capture before state for edit logging
                         TransactionMaster before = null;
+                        List<TransactionDetail> beforeDetails = null;
                         if (TRANMID != 0)
                         {
                             transactionmaster = context.transactionmaster.Find(TRANMID);
@@ -714,6 +715,8 @@ namespace scfs_erp.Controllers.Import
                                 if (before != null)
                                 {
                                     EnsureBaselineVersionZero(before, Session["CUSRID"]?.ToString() ?? "");
+                                    // Capture TransactionDetail before state
+                                    beforeDetails = context.transactiondetail.AsNoTracking().Where(x => x.TRANMID == TRANMID).ToList();
                                 }
                             }
                             catch { /* ignore if baseline creation fails */ }
@@ -1173,7 +1176,7 @@ namespace scfs_erp.Controllers.Import
                                 var after = context.transactionmaster.AsNoTracking().FirstOrDefault(x => x.TRANMID == TRANMID);
                                 if (after != null)
                                 {
-                                    LogTransactionEdits(before, after, Session["CUSRID"]?.ToString() ?? "");
+                                    LogTransactionEdits(before, after, Session["CUSRID"]?.ToString() ?? "", context, beforeDetails);
                                 }
                             }
                             catch { /* ignore logging errors */ }
@@ -3478,7 +3481,7 @@ namespace scfs_erp.Controllers.Import
         }
 
         // ========================= Edit Logging Helper Methods =========================
-        private void LogTransactionEdits(TransactionMaster before, TransactionMaster after, string userId)
+        private void LogTransactionEdits(TransactionMaster before, TransactionMaster after, string userId, SCFSERPContext context, List<TransactionDetail> beforeDetails = null)
         {
             if (before == null || after == null) return;
             var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
@@ -3604,7 +3607,11 @@ namespace scfs_erp.Controllers.Import
             // Log TransactionDetail changes
             try
             {
-                var beforeDetails = context.transactiondetail.AsNoTracking().Where(x => x.TRANMID == before.TRANMID).ToList();
+                // Use provided beforeDetails if available, otherwise load from database
+                if (beforeDetails == null)
+                {
+                    beforeDetails = context.transactiondetail.AsNoTracking().Where(x => x.TRANMID == before.TRANMID).ToList();
+                }
                 var afterDetails = context.transactiondetail.AsNoTracking().Where(x => x.TRANMID == after.TRANMID).ToList();
                 
                 var beforeDict = beforeDetails.ToDictionary(x => x.TRANDID, x => x);
@@ -3621,7 +3628,7 @@ namespace scfs_erp.Controllers.Import
                     
                     if (afterDetail == null) continue;
                     
-                    LogTransactionDetailEdits(beforeDetail, afterDetail, gidno, userId, versionLabel);
+                    LogTransactionDetailEdits(beforeDetail, afterDetail, gidno, userId, versionLabel, context);
                 }
             }
             catch (Exception ex)
@@ -3630,7 +3637,7 @@ namespace scfs_erp.Controllers.Import
             }
         }
         
-        private void LogTransactionDetailEdits(TransactionDetail before, TransactionDetail after, string gidno, string userId, string versionLabel)
+        private void LogTransactionDetailEdits(TransactionDetail before, TransactionDetail after, string gidno, string userId, string versionLabel, SCFSERPContext context)
         {
             if (after == null) return;
             var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
