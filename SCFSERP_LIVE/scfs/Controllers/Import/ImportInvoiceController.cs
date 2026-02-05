@@ -1186,7 +1186,9 @@ namespace scfs_erp.Controllers.Import
                                 var after = context.transactionmaster.AsNoTracking().FirstOrDefault(x => x.TRANMID == TRANMID);
                                 if (after != null)
                                 {
+                                    System.Diagnostics.Debug.WriteLine($"=== LogTransactionEdits called for TRANMID={TRANMID}, beforeDetails.Count={beforeDetails?.Count ?? 0} ===");
                                     LogTransactionEdits(before, after, Session["CUSRID"]?.ToString() ?? "", context, beforeDetails);
+                                    System.Diagnostics.Debug.WriteLine($"=== LogTransactionEdits completed for TRANMID={TRANMID} ===");
                                 }
                             }
                             catch (Exception ex)
@@ -3528,6 +3530,33 @@ namespace scfs_erp.Controllers.Import
 
             var versionLabel = $"V{nextVersion}-{gidno}";
             
+            // Track logged field changes to prevent duplicates within the same save operation
+            // Key format: "FieldName|OldValue|NewValue" (normalized)
+            var loggedChanges = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            
+            // Helper method to create a unique key for a field change
+            string GetChangeKey(string fieldName, string oldValue, string newValue)
+            {
+                // Normalize NULL values to empty string for comparison
+                var oldVal = string.IsNullOrEmpty(oldValue) ? "NULL" : oldValue.Trim();
+                var newVal = string.IsNullOrEmpty(newValue) ? "NULL" : newValue.Trim();
+                return $"{fieldName}|{oldVal}|{newVal}";
+            }
+            
+            // Wrapper method that checks for duplicates before inserting
+            void InsertEditLogRowWithDedup(string fieldName, string oldValue, string newValue)
+            {
+                var changeKey = GetChangeKey(fieldName, oldValue, newValue);
+                if (loggedChanges.Contains(changeKey))
+                {
+                    System.Diagnostics.Debug.WriteLine($"Skipping duplicate log entry: Field={fieldName}, OldValue={oldValue}, NewValue={newValue}");
+                    return;
+                }
+                
+                loggedChanges.Add(changeKey);
+                InsertEditLogRow(cs.ConnectionString, gidno, fieldName, oldValue, newValue, userId, versionLabel, "ImportInvoice");
+            }
+            
             var props = typeof(TransactionMaster).GetProperties(BindingFlags.Public | BindingFlags.Instance);
             foreach (var p in props)
             {
@@ -3601,7 +3630,7 @@ namespace scfs_erp.Controllers.Import
                 var os = FormatValForLogging(p.Name, ov);
                 var ns = FormatValForLogging(p.Name, nv);
                 
-                InsertEditLogRow(cs.ConnectionString, gidno, p.Name, os, ns, userId, versionLabel, "ImportInvoice");
+                InsertEditLogRowWithDedup(p.Name, os, ns);
             }
             
             // Log TransactionDetail changes
@@ -3619,16 +3648,36 @@ namespace scfs_erp.Controllers.Import
                 var beforeDict = beforeDetails.ToDictionary(x => x.TRANDID, x => x);
                 var afterDict = afterDetails.ToDictionary(x => x.TRANDID, x => x);
                 
+                // Use HashSet to ensure we only process each detail record once
                 var allDetailIds = new HashSet<int>();
-                foreach (var d in beforeDetails) allDetailIds.Add(d.TRANDID);
-                foreach (var d in afterDetails) allDetailIds.Add(d.TRANDID);
+                foreach (var d in beforeDetails) 
+                {
+                    if (d.TRANDID > 0) allDetailIds.Add(d.TRANDID);
+                }
+                foreach (var d in afterDetails) 
+                {
+                    if (d.TRANDID > 0) allDetailIds.Add(d.TRANDID);
+                }
+                
+                // Track which detail records we've already logged to prevent duplicates
+                var loggedDetailIds = new HashSet<int>();
                 
                 foreach (var detailId in allDetailIds)
                 {
+                    // Skip if we've already logged this detail record (duplicate prevention)
+                    if (loggedDetailIds.Contains(detailId))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Skipping duplicate detail TRANDID={detailId}");
+                        continue;
+                    }
+                    
                     var beforeDetail = beforeDict.ContainsKey(detailId) ? beforeDict[detailId] : null;
                     var afterDetail = afterDict.ContainsKey(detailId) ? afterDict[detailId] : null;
                     
                     if (afterDetail == null) continue;
+                    
+                    // Mark this detail as logged to prevent duplicate processing
+                    loggedDetailIds.Add(detailId);
                     
                     // Debug: Log what we're comparing
                     if (beforeDetail != null)
@@ -3641,7 +3690,7 @@ namespace scfs_erp.Controllers.Import
                         System.Diagnostics.Debug.WriteLine($"Logging detail TRANDID={detailId}: before=null, after.TARIFFMID={afterDetail.TARIFFMID}");
                     }
                     
-                    LogTransactionDetailEdits(beforeDetail, afterDetail, gidno, userId, versionLabel, context);
+                    LogTransactionDetailEdits(beforeDetail, afterDetail, gidno, userId, versionLabel, context, loggedChanges);
                 }
             }
             catch (Exception ex)
@@ -3650,7 +3699,7 @@ namespace scfs_erp.Controllers.Import
             }
         }
         
-        private void LogTransactionDetailEdits(TransactionDetail before, TransactionDetail after, string gidno, string userId, string versionLabel, SCFSERPContext context)
+        private void LogTransactionDetailEdits(TransactionDetail before, TransactionDetail after, string gidno, string userId, string versionLabel, SCFSERPContext context, HashSet<string> loggedChanges = null)
         {
             if (after == null) return;
             var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
@@ -3665,6 +3714,32 @@ namespace scfs_erp.Controllers.Import
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to load V0 baseline values: {ex.Message}");
+            }
+            
+            // Wrapper method that checks for duplicates before inserting
+            void InsertEditLogRowWithDedup(string fieldName, string oldValue, string newValue)
+            {
+                if (loggedChanges != null)
+                {
+                    // Helper method to create a unique key for a field change
+                    string GetChangeKey(string fn, string ov, string nv)
+                    {
+                        var oldVal = string.IsNullOrEmpty(ov) ? "NULL" : ov.Trim();
+                        var newVal = string.IsNullOrEmpty(nv) ? "NULL" : nv.Trim();
+                        return $"{fn}|{oldVal}|{newVal}";
+                    }
+                    
+                    var changeKey = GetChangeKey(fieldName, oldValue, newValue);
+                    if (loggedChanges.Contains(changeKey))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Skipping duplicate log entry: Field={fieldName}, OldValue={oldValue}, NewValue={newValue}");
+                        return;
+                    }
+                    
+                    loggedChanges.Add(changeKey);
+                }
+                
+                InsertEditLogRow(cs.ConnectionString, gidno, fieldName, oldValue, newValue, userId, versionLabel, "ImportInvoice");
             }
 
             var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -3786,10 +3861,19 @@ namespace scfs_erp.Controllers.Import
                 
                 var ns = FormatValForLoggingDetail(p.Name, nv);
 
+                // Additional validation: Skip if formatted old and new values are effectively the same
+                var osTrimmed = (os ?? "").Trim();
+                var nsTrimmed = (ns ?? "").Trim();
+                if (string.Equals(osTrimmed, nsTrimmed, StringComparison.OrdinalIgnoreCase))
+                {
+                    System.Diagnostics.Debug.WriteLine($"Skipping {p.Name}: Formatted values are identical (os='{osTrimmed}', ns='{nsTrimmed}')");
+                    continue;
+                }
+
                 // Debug logging to verify values are being captured
                 System.Diagnostics.Debug.WriteLine($"Logging {p.Name}: OldValue='{os}', NewValue='{ns}', before.ov={ov}, v0BaselineExists={v0BaselineValues != null && v0BaselineValues.ContainsKey(p.Name)}");
 
-                InsertEditLogRow(cs.ConnectionString, gidno, p.Name, os ?? "", ns ?? "", userId, versionLabel, "ImportInvoice");
+                InsertEditLogRowWithDedup(p.Name, os ?? "", ns ?? "");
                 
                 // If TARIFFMID changed, also log TARIFFGID (Tariff Group)
                 if (p.Name.Equals("TARIFFMID", StringComparison.OrdinalIgnoreCase))
@@ -3875,10 +3959,7 @@ namespace scfs_erp.Controllers.Import
                         // Only log TARIFFGID if it actually changed or if TARIFFMID changed
                         if (oldTariffGid != newTariffGid || oldTariffId != newTariffId)
                         {
-                            InsertEditLogRow(cs.ConnectionString, gidno, "TARIFFGID", 
-                                oldTariffGid ?? "", 
-                                newTariffGid ?? "", 
-                                userId, versionLabel, "ImportInvoice");
+                            InsertEditLogRowWithDedup("TARIFFGID", oldTariffGid ?? "", newTariffGid ?? "");
                         }
                     }
                     catch (Exception ex)
@@ -4164,6 +4245,33 @@ namespace scfs_erp.Controllers.Import
             var gidno = snapshot.TRANMID.ToString();
             if (string.IsNullOrWhiteSpace(gidno)) return;
             var baselineVer = "v0-" + gidno;
+            
+            // Track logged field changes to prevent duplicates within baseline creation
+            // Key format: "FieldName|OldValue|NewValue" (normalized)
+            var loggedChanges = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            
+            // Helper method to create a unique key for a field change
+            string GetChangeKey(string fieldName, string oldValue, string newValue)
+            {
+                // Normalize NULL values to empty string for comparison
+                var oldVal = string.IsNullOrEmpty(oldValue) ? "NULL" : oldValue.Trim();
+                var newVal = string.IsNullOrEmpty(newValue) ? "NULL" : newValue.Trim();
+                return $"{fieldName}|{oldVal}|{newVal}";
+            }
+            
+            // Wrapper method that checks for duplicates before inserting
+            void InsertEditLogRowWithDedup(string fieldName, string oldValue, string newValue)
+            {
+                var changeKey = GetChangeKey(fieldName, oldValue, newValue);
+                if (loggedChanges.Contains(changeKey))
+                {
+                    System.Diagnostics.Debug.WriteLine($"Skipping duplicate baseline log entry: Field={fieldName}, OldValue={oldValue}, NewValue={newValue}");
+                    return;
+                }
+                
+                loggedChanges.Add(changeKey);
+                InsertEditLogRow(cs.ConnectionString, gidno, fieldName, oldValue, newValue, userId, baselineVer, "ImportInvoice");
+            }
 
             var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -4220,7 +4328,7 @@ namespace scfs_erp.Controllers.Import
                 }
 
                 var newVal = FormatValForLogging(p.Name, valObj);
-                InsertEditLogRow(cs.ConnectionString, gidno, p.Name, null, newVal, userId, baselineVer, "ImportInvoice");
+                InsertEditLogRowWithDedup(p.Name, null, newVal);
             }
 
             // Log TransactionDetail records (including TARIFFMID)
@@ -4228,13 +4336,39 @@ namespace scfs_erp.Controllers.Import
             {
                 foreach (var detail in detailRecords)
                 {
-                    InsertBaselineSnapshotDetail(detail, gidno, userId, baselineVer, cs.ConnectionString);
+                    InsertBaselineSnapshotDetail(detail, gidno, userId, baselineVer, cs.ConnectionString, loggedChanges);
                 }
             }
         }
 
-        private void InsertBaselineSnapshotDetail(TransactionDetail snapshot, string gidno, string userId, string baselineVer, string connectionString)
+        private void InsertBaselineSnapshotDetail(TransactionDetail snapshot, string gidno, string userId, string baselineVer, string connectionString, HashSet<string> loggedChanges = null)
         {
+            // Wrapper method that checks for duplicates before inserting
+            void InsertEditLogRowWithDedup(string fieldName, string oldValue, string newValue)
+            {
+                if (loggedChanges != null)
+                {
+                    // Helper method to create a unique key for a field change
+                    string GetChangeKey(string fn, string ov, string nv)
+                    {
+                        var oldVal = string.IsNullOrEmpty(ov) ? "NULL" : ov.Trim();
+                        var newVal = string.IsNullOrEmpty(nv) ? "NULL" : nv.Trim();
+                        return $"{fn}|{oldVal}|{newVal}";
+                    }
+                    
+                    var changeKey = GetChangeKey(fieldName, oldValue, newValue);
+                    if (loggedChanges.Contains(changeKey))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Skipping duplicate baseline log entry: Field={fieldName}, OldValue={oldValue}, NewValue={newValue}");
+                        return;
+                    }
+                    
+                    loggedChanges.Add(changeKey);
+                }
+                
+                InsertEditLogRow(connectionString, gidno, fieldName, oldValue, newValue, userId, baselineVer, "ImportInvoice");
+            }
+            
             var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 "TRANDID", "TRANMID", "BILLEDID", "SLABTID", "TRANDREFID",
@@ -4300,7 +4434,7 @@ namespace scfs_erp.Controllers.Import
                 if (shouldLog)
                 {
                     var newVal = FormatValForLoggingDetail(p.Name, valObj);
-                    InsertEditLogRow(connectionString, gidno, p.Name, null, newVal ?? "", userId, baselineVer, "ImportInvoice");
+                    InsertEditLogRowWithDedup(p.Name, null, newVal ?? "");
 
                     // If TARIFFMID is logged, also log TARIFFGID
                     if (p.Name.Equals("TARIFFMID", StringComparison.OrdinalIgnoreCase))
@@ -4328,7 +4462,7 @@ namespace scfs_erp.Controllers.Import
                                 }
                             }
 
-                            InsertEditLogRow(connectionString, gidno, "TARIFFGID", null, tariffGid ?? "", userId, baselineVer, "ImportInvoice");
+                            InsertEditLogRowWithDedup("TARIFFGID", null, tariffGid ?? "");
                         }
                         catch (Exception ex)
                         {
@@ -4339,4 +4473,5 @@ namespace scfs_erp.Controllers.Import
             }
         }
     }
+}
 }
