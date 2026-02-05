@@ -706,6 +706,8 @@ namespace scfs_erp.Controllers.Import
                         // Capture before state for edit logging
                         TransactionMaster before = null;
                         List<TransactionDetail> beforeDetails = null;
+                        List<TransactionMasterFactor> beforeFactors = null;
+                        string beforeDPAIDNO = null;
                         if (TRANMID != 0)
                         {
                             transactionmaster = context.transactionmaster.Find(TRANMID);
@@ -717,6 +719,8 @@ namespace scfs_erp.Controllers.Import
                                     EnsureBaselineVersionZero(before, Session["CUSRID"]?.ToString() ?? "");
                                     // Capture TransactionDetail before state
                                     beforeDetails = context.transactiondetail.AsNoTracking().Where(x => x.TRANMID == TRANMID).ToList();
+                                    // Capture TransactionMasterFactor before state
+                                    beforeFactors = context.transactionmasterfactor.AsNoTracking().Where(x => x.TRANMID == TRANMID).ToList();
                                 }
                             }
                             catch { /* ignore if baseline creation fails */ }
@@ -1053,6 +1057,16 @@ namespace scfs_erp.Controllers.Import
                             if (boolSTFDIDS[count] == "true")
                             {
                                 TRANDID = Convert.ToInt32(F_TRANDID[count]); BILLEMID = Convert.ToInt32(F_BILLEMID[count]);
+                                // Capture DPAIDNO before state for edit logging (only once)
+                                if (BILLEMID > 0 && beforeDPAIDNO == null)
+                                {
+                                    try
+                                    {
+                                        var result = context.Database.SqlQuery<string>("SELECT DPAIDNO FROM BILLENTRYMASTER WHERE BILLEMID=" + BILLEMID).FirstOrDefault();
+                                        beforeDPAIDNO = result ?? "";
+                                    }
+                                    catch { /* ignore if capture fails */ }
+                                }
                                 //  var boolSTFDID = Convert.ToString(boolSTFDIDS[count]);
                                 if (TRANDID != 0)
                                 {
@@ -1189,6 +1203,67 @@ namespace scfs_erp.Controllers.Import
                                     System.Diagnostics.Debug.WriteLine($"=== LogTransactionEdits called for TRANMID={TRANMID}, beforeDetails.Count={beforeDetails?.Count ?? 0} ===");
                                     LogTransactionEdits(before, after, Session["CUSRID"]?.ToString() ?? "", context, beforeDetails);
                                     System.Diagnostics.Debug.WriteLine($"=== LogTransactionEdits completed for TRANMID={TRANMID} ===");
+                                    
+                                    // Log DPAIDNO changes from BILLENTRYMASTER
+                                    if (BILLEMID > 0)
+                                    {
+                                        try
+                                        {
+                                            var afterDPAIDNO = context.Database.SqlQuery<string>("SELECT DPAIDNO FROM BILLENTRYMASTER WHERE BILLEMID=" + BILLEMID).FirstOrDefault() ?? "";
+                                            if (beforeDPAIDNO != afterDPAIDNO)
+                                            {
+                                                var gidno = TRANMID.ToString();
+                                                var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+                                                if (cs != null && !string.IsNullOrWhiteSpace(cs.ConnectionString))
+                                                {
+                                                    // Get version label
+                                                    int nextVersion = 1;
+                                                    try
+                                                    {
+                                                        using (var sql = new SqlConnection(cs.ConnectionString))
+                                                        using (var cmd = new SqlCommand(@"
+                                                            SELECT ISNULL(
+                                                                MAX(TRY_CAST(
+                                                                    SUBSTRING([Version], 2, 
+                                                                        CASE WHEN CHARINDEX('-', [Version]) > 0 
+                                                                             THEN CHARINDEX('-', [Version]) - 2 
+                                                                             ELSE LEN([Version]) - 1
+                                                                        END
+                                                                    ) AS INT)
+                                                                ), 0) + 1
+                                                            FROM [dbo].[GateInDetailEditLog]
+                                                            WHERE [GIDNO] = @GIDNO AND [Modules] = 'ImportInvoice'", sql))
+                                                        {
+                                                            cmd.Parameters.AddWithValue("@GIDNO", gidno);
+                                                            sql.Open();
+                                                            var obj = cmd.ExecuteScalar();
+                                                            if (obj != null && obj != DBNull.Value)
+                                                                nextVersion = Convert.ToInt32(obj);
+                                                        }
+                                                    }
+                                                    catch { /* ignore version errors */ }
+                                                    
+                                                    var versionLabel = $"V{nextVersion}-{gidno}";
+                                                    InsertEditLogRow(cs.ConnectionString, gidno, "DPAIDNO", beforeDPAIDNO ?? "", afterDPAIDNO, Session["CUSRID"]?.ToString() ?? "", versionLabel, "ImportInvoice");
+                                                }
+                                            }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            System.Diagnostics.Debug.WriteLine($"Failed to log DPAIDNO changes: {ex.Message}");
+                                        }
+                                    }
+                                    
+                                    // Log TransactionMasterFactor (CFID) changes
+                                    try
+                                    {
+                                        var afterFactors = context.transactionmasterfactor.AsNoTracking().Where(x => x.TRANMID == TRANMID).ToList();
+                                        LogTransactionMasterFactorEdits(beforeFactors, afterFactors, TRANMID.ToString(), Session["CUSRID"]?.ToString() ?? "", context);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        System.Diagnostics.Debug.WriteLine($"Failed to log TransactionMasterFactor changes: {ex.Message}");
+                                    }
                                 }
                             }
                             catch (Exception ex)
@@ -3256,6 +3331,11 @@ namespace scfs_erp.Controllers.Import
                         case "TRANDPNO": return "Duty Paid No.";
                         case "TRANDSAMT": return "Storage(Calc)";
                         case "TRANCFID": return "costfactor details";
+                        case "TRANEDATE": return "Charge Date";
+                        case "TRANDHAMT": return "Handling";
+                        case "TRAN_PULSE_STRG_TYPE": return "Storage(Calc)";
+                        case "DPAIDNO": return "Duty Paid No";
+                        case "CFID": return "Costfactordetails";
                         default: return field;
                     }
                 }
@@ -3454,6 +3534,11 @@ namespace scfs_erp.Controllers.Import
                         case "TRANDPNO": return "Duty Paid No.";
                         case "TRANDSAMT": return "Storage(Calc)";
                         case "TRANCFID": return "costfactor details";
+                        case "TRANEDATE": return "Charge Date";
+                        case "TRANDHAMT": return "Handling";
+                        case "TRAN_PULSE_STRG_TYPE": return "Storage(Calc)";
+                        case "DPAIDNO": return "Duty Paid No";
+                        case "CFID": return "Costfactordetails";
                         default: return field;
                     }
                 }
@@ -3498,7 +3583,7 @@ namespace scfs_erp.Controllers.Import
                 "TRANTALLYCHAID", "TRANTALLYCHANAME", "TCATEAID", "TCATEAGSTNO", "TSTATEID",
                 "TALLYSTAT", "IRNNO", "ACKNO", "ACKDT", "QRCODEPATH", "CATEAID", "STATEID", "CATEAGSTNO",
                 "TRANGSTNO", "TRANPAMT", "TRANREFBNAME", "TRANAMTWRDS", "TRANLMDATE", "TRANLSDATE", "TRANNARTN",
-                "HANDL_CGST_AMT", "HANDL_SGST_AMT", "HANDL_IGST_AMT", "HANDL_TAXABLE_AMT", "TRAN_PULSE_STRG_TYPE"
+                "HANDL_CGST_AMT", "HANDL_SGST_AMT", "HANDL_IGST_AMT", "HANDL_TAXABLE_AMT"
             };
 
             var gidno = after.TRANMID.ToString();
@@ -3745,14 +3830,14 @@ namespace scfs_erp.Controllers.Import
             var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 "TRANDID", "TRANMID", "BILLEDID", "SLABTID", "TRANDREFID",
-                "TRANIDATE", "TRANSDATE", "TRANEDATE",
+                "TRANIDATE", "TRANSDATE",
                 "TRANVHLFROM", "TRANVHLTO", "DISPSTATUS", "STFDID", "SBDID", "TRANDAID",
                 "RCOL1", "RCOL2", "RCOL3", "RCOL4", "RCOL5", "RCOL6", "RCOL7",
                 "RAMT1", "RAMT2", "RAMT3", "RAMT4", "RAMT5", "RAMT6", "RAMT7",
                 "RCAMT1", "RCAMT2", "RCAMT3", "RCAMT4", "RCAMT5", "RCAMT6", "RCAMT7",
                 "TRANDQTY", "TRANDRATE", "TRANDWGHT", "TRANDNOP",
                 "TRANDEAMT", "TRANDFAMT", "TRANDPAMT", "TRANDAAMT", "TRANDNAMT",
-                "TRANDHAMT", "TRAND_COVID_DISC_AMT", "TRANDADONAMT",
+                "TRAND_COVID_DISC_AMT", "TRANDADONAMT",
                 "TRAND_STRG_CGST_AMT", "TRAND_STRG_SGST_AMT", "TRAND_STRG_IGST_AMT",
                 "TRAND_HANDL_CGST_AMT", "TRAND_HANDL_SGST_AMT", "TRAND_HANDL_IGST_AMT",
                 "TRAND_HANDL_CGST_EXPRN", "TRAND_HANDL_SGST_EXPRN", "TRAND_HANDL_IGST_EXPRN"
@@ -3966,6 +4051,84 @@ namespace scfs_erp.Controllers.Import
                     {
                         System.Diagnostics.Debug.WriteLine($"Failed to log TARIFFGID change: {ex.Message}");
                     }
+                }
+            }
+        }
+        
+        private void LogTransactionMasterFactorEdits(List<TransactionMasterFactor> before, List<TransactionMasterFactor> after, string gidno, string userId, SCFSERPContext context)
+        {
+            if (after == null) after = new List<TransactionMasterFactor>();
+            if (before == null) before = new List<TransactionMasterFactor>();
+            
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (cs == null || string.IsNullOrWhiteSpace(cs.ConnectionString)) return;
+            
+            // Get version label
+            int nextVersion = 1;
+            try
+            {
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                using (var cmd = new SqlCommand(@"
+                    SELECT ISNULL(
+                        MAX(TRY_CAST(
+                            SUBSTRING([Version], 2, 
+                                CASE WHEN CHARINDEX('-', [Version]) > 0 
+                                     THEN CHARINDEX('-', [Version]) - 2 
+                                     ELSE LEN([Version]) - 1
+                                END
+                            ) AS INT)
+                        ), 0) + 1
+                    FROM [dbo].[GateInDetailEditLog]
+                    WHERE [GIDNO] = @GIDNO AND [Modules] = 'ImportInvoice'", sql))
+                {
+                    cmd.Parameters.AddWithValue("@GIDNO", gidno);
+                    sql.Open();
+                    var obj = cmd.ExecuteScalar();
+                    if (obj != null && obj != DBNull.Value)
+                        nextVersion = Convert.ToInt32(obj);
+                }
+            }
+            catch { /* ignore version errors */ }
+            
+            var versionLabel = $"V{nextVersion}-{gidno}";
+            
+            // Get cost factor descriptions for mapping
+            var costFactorDict = context.costfactormasters.ToDictionary(x => x.CFID, x => x.CFDESC);
+            
+            // Create sets of CFIDs for comparison
+            var beforeCFIDs = before.Select(x => x.CFID).OrderBy(x => x).ToList();
+            var afterCFIDs = after.Select(x => x.CFID).OrderBy(x => x).ToList();
+            
+            // Check if CFIDs changed
+            if (!beforeCFIDs.SequenceEqual(afterCFIDs))
+            {
+                // Format old and new values as comma-separated cost factor descriptions
+                string oldValue = "";
+                if (beforeCFIDs.Any())
+                {
+                    oldValue = string.Join(", ", beforeCFIDs.Select(cfid => 
+                        costFactorDict.ContainsKey(cfid) ? costFactorDict[cfid] : cfid.ToString()));
+                }
+                else
+                {
+                    oldValue = "";
+                }
+                
+                string newValue = "";
+                if (afterCFIDs.Any())
+                {
+                    newValue = string.Join(", ", afterCFIDs.Select(cfid => 
+                        costFactorDict.ContainsKey(cfid) ? costFactorDict[cfid] : cfid.ToString()));
+                }
+                else
+                {
+                    newValue = "";
+                }
+                
+                // Only log if values actually changed
+                if (oldValue != newValue)
+                {
+                    InsertEditLogRow(cs.ConnectionString, gidno, "CFID", oldValue, newValue, userId, versionLabel, "ImportInvoice");
                 }
             }
         }
