@@ -947,12 +947,7 @@ namespace scfs_erp.Controllers.Import
                             context.SaveChanges();
                             TRANMID = transactionmaster.TRANMID;
                             
-                            // Create baseline for new record
-                            try
-                            {
-                                EnsureBaselineVersionZero(transactionmaster, Session["CUSRID"]?.ToString() ?? "");
-                            }
-                            catch { /* ignore baseline creation errors */ }
+                            // Baseline will be created after TransactionDetail records are saved (see below)
                         }
                         else
                         {
@@ -1168,7 +1163,22 @@ namespace scfs_erp.Controllers.Import
                         //  Response.Redirect("Index");
                         trans.Commit();
                         
-                        // Log changes after successful save
+                        // Ensure V0 baseline exists before logging changes (for both new and existing records)
+                        try
+                        {
+                            var currentRecord = context.transactionmaster.AsNoTracking().FirstOrDefault(x => x.TRANMID == TRANMID);
+                            if (currentRecord != null)
+                            {
+                                // Ensure baseline exists (will only create if it doesn't exist)
+                                EnsureBaselineVersionZero(currentRecord, Session["CUSRID"]?.ToString() ?? "");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Failed to ensure baseline exists: {ex.Message}");
+                        }
+                        
+                        // Log changes after successful save (only for existing records that were edited)
                         if (before != null && TRANMID != 0)
                         {
                             try
@@ -1179,20 +1189,10 @@ namespace scfs_erp.Controllers.Import
                                     LogTransactionEdits(before, after, Session["CUSRID"]?.ToString() ?? "", context, beforeDetails);
                                 }
                             }
-                            catch { /* ignore logging errors */ }
-                        }
-                        else if (TRANMID == 0)
-                        {
-                            // Create baseline for new record
-                            try
+                            catch (Exception ex)
                             {
-                                var newRecord = context.transactionmaster.AsNoTracking().FirstOrDefault(x => x.TRANDNO == transactionmaster.TRANDNO);
-                                if (newRecord != null)
-                                {
-                                    EnsureBaselineVersionZero(newRecord, Session["CUSRID"]?.ToString() ?? "");
-                                }
+                                System.Diagnostics.Debug.WriteLine($"Failed to log changes: {ex.Message}");
                             }
-                            catch { /* ignore baseline creation errors */ }
                         }
                         
                         Response.Redirect("Index");
@@ -3614,6 +3614,8 @@ namespace scfs_erp.Controllers.Import
                 }
                 var afterDetails = context.transactiondetail.AsNoTracking().Where(x => x.TRANMID == after.TRANMID).ToList();
                 
+                System.Diagnostics.Debug.WriteLine($"LogTransactionEdits: beforeDetails.Count={beforeDetails?.Count ?? 0}, afterDetails.Count={afterDetails?.Count ?? 0}");
+                
                 var beforeDict = beforeDetails.ToDictionary(x => x.TRANDID, x => x);
                 var afterDict = afterDetails.ToDictionary(x => x.TRANDID, x => x);
                 
@@ -3627,6 +3629,17 @@ namespace scfs_erp.Controllers.Import
                     var afterDetail = afterDict.ContainsKey(detailId) ? afterDict[detailId] : null;
                     
                     if (afterDetail == null) continue;
+                    
+                    // Debug: Log what we're comparing
+                    if (beforeDetail != null)
+                    {
+                        var beforeTariff = beforeDetail.TARIFFMID;
+                        System.Diagnostics.Debug.WriteLine($"Logging detail TRANDID={detailId}: before.TARIFFMID={beforeTariff}, after.TARIFFMID={afterDetail.TARIFFMID}");
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Logging detail TRANDID={detailId}: before=null, after.TARIFFMID={afterDetail.TARIFFMID}");
+                    }
                     
                     LogTransactionDetailEdits(beforeDetail, afterDetail, gidno, userId, versionLabel, context);
                 }
@@ -3642,6 +3655,17 @@ namespace scfs_erp.Controllers.Import
             if (after == null) return;
             var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
             if (cs == null || string.IsNullOrWhiteSpace(cs.ConnectionString)) return;
+
+            // Get V0 baseline values for this record to use as OldValue when before is null/empty
+            Dictionary<string, string> v0BaselineValues = null;
+            try
+            {
+                v0BaselineValues = GetV0BaselineValues(cs.ConnectionString, gidno, "ImportInvoice");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to load V0 baseline values: {ex.Message}");
+            }
 
             var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -3669,7 +3693,15 @@ namespace scfs_erp.Controllers.Import
                 var ov = before != null ? p.GetValue(before, null) : null;
                 var nv = p.GetValue(after, null);
 
-                if (BothNull(ov, nv)) continue;
+                // Always log TARIFFMID changes, even if old value is null
+                if (p.Name.Equals("TARIFFMID", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Don't skip if TARIFFMID - we want to log even if old value is null/0
+                }
+                else
+                {
+                    if (BothNull(ov, nv)) continue;
+                }
 
                 var type = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
                 bool changed;
@@ -3685,8 +3717,16 @@ namespace scfs_erp.Controllers.Import
                 {
                     var i1 = Convert.ToInt64(ov ?? 0);
                     var i2 = Convert.ToInt64(nv ?? 0);
-                    if (i1 == 0 && i2 == 0) continue;
-                    changed = i1 != i2;
+                    // Always log TARIFFMID changes, even if one value is 0
+                    if (p.Name.Equals("TARIFFMID", StringComparison.OrdinalIgnoreCase))
+                    {
+                        changed = i1 != i2;
+                    }
+                    else
+                    {
+                        if (i1 == 0 && i2 == 0) continue;
+                        changed = i1 != i2;
+                    }
                 }
                 else if (type == typeof(DateTime))
                 {
@@ -3722,12 +3762,36 @@ namespace scfs_erp.Controllers.Import
 
                 if (!changed) continue;
 
-                var os = FormatValForLoggingDetail(p.Name, ov);
+                // Get old value - prioritize V0 baseline (has formatted descriptions), then format before object value
+                string os = "";
+                
+                // First, try to get from V0 baseline (this has the formatted display values)
+                if (v0BaselineValues != null && v0BaselineValues.ContainsKey(p.Name) && !string.IsNullOrEmpty(v0BaselineValues[p.Name]))
+                {
+                    os = v0BaselineValues[p.Name];
+                }
+                else
+                {
+                    // If no V0 baseline, format the before object value
+                    if (ov != null)
+                    {
+                        os = FormatValForLoggingDetail(p.Name, ov);
+                    }
+                    else
+                    {
+                        // If before object is null and no V0 baseline, use empty string
+                        os = "";
+                    }
+                }
+                
                 var ns = FormatValForLoggingDetail(p.Name, nv);
 
-                InsertEditLogRow(cs.ConnectionString, gidno, p.Name, os, ns, userId, versionLabel, "ImportInvoice");
+                // Debug logging to verify values are being captured
+                System.Diagnostics.Debug.WriteLine($"Logging {p.Name}: OldValue='{os}', NewValue='{ns}', before.ov={ov}, v0BaselineExists={v0BaselineValues != null && v0BaselineValues.ContainsKey(p.Name)}");
+
+                InsertEditLogRow(cs.ConnectionString, gidno, p.Name, os ?? "", ns ?? "", userId, versionLabel, "ImportInvoice");
                 
-                // If TARIFFMID changed, also log TARIFFGID
+                // If TARIFFMID changed, also log TARIFFGID (Tariff Group)
                 if (p.Name.Equals("TARIFFMID", StringComparison.OrdinalIgnoreCase))
                 {
                     try
@@ -3740,6 +3804,22 @@ namespace scfs_erp.Controllers.Import
                             else if (ov is long) oldTariffId = (int)(long)ov;
                             else int.TryParse(Convert.ToString(ov), out oldTariffId);
                         }
+                        
+                        // If oldTariffId is 0, try to get from V0 baseline
+                        if (oldTariffId == 0 && v0BaselineValues != null && v0BaselineValues.ContainsKey("TARIFFMID"))
+                        {
+                            var v0TariffDesc = v0BaselineValues["TARIFFMID"];
+                            if (!string.IsNullOrEmpty(v0TariffDesc))
+                            {
+                                // Try to find tariff by description
+                                var v0Tariff = context.tariffmasters.FirstOrDefault(t => t.TARIFFMDESC == v0TariffDesc);
+                                if (v0Tariff != null)
+                                {
+                                    oldTariffId = v0Tariff.TARIFFMID;
+                                }
+                            }
+                        }
+                        
                         if (nv != null)
                         {
                             if (nv is int) newTariffId = (int)nv;
@@ -3748,6 +3828,7 @@ namespace scfs_erp.Controllers.Import
                             else int.TryParse(Convert.ToString(nv), out newTariffId);
                         }
                         
+                        // Get old TARIFFGID (Tariff Group) value
                         string oldTariffGid = "";
                         if (oldTariffId > 0)
                         {
@@ -3759,7 +3840,21 @@ namespace scfs_erp.Controllers.Import
                                     oldTariffGid = oldTariffGrp.TGDESC;
                             }
                         }
+                        else
+                        {
+                            // Old value was 0 or null - try to get from V0 baseline
+                            if (v0BaselineValues != null && v0BaselineValues.ContainsKey("TARIFFGID"))
+                            {
+                                oldTariffGid = v0BaselineValues["TARIFFGID"];
+                            }
+                            else
+                            {
+                                // No V0 baseline found - log as empty to show no tariff was selected
+                                oldTariffGid = "";
+                            }
+                        }
                         
+                        // Get new TARIFFGID (Tariff Group) value
                         string newTariffGid = "";
                         if (newTariffId > 0)
                         {
@@ -3771,11 +3866,20 @@ namespace scfs_erp.Controllers.Import
                                     newTariffGid = newTariffGrp.TGDESC;
                             }
                         }
+                        else
+                        {
+                            // New value is 0 or null - log as empty to show no tariff is selected
+                            newTariffGid = "";
+                        }
                         
-                        InsertEditLogRow(cs.ConnectionString, gidno, "TARIFFGID", 
-                            string.IsNullOrEmpty(oldTariffGid) ? "" : oldTariffGid, 
-                            string.IsNullOrEmpty(newTariffGid) ? "" : newTariffGid, 
-                            userId, versionLabel, "ImportInvoice");
+                        // Only log TARIFFGID if it actually changed or if TARIFFMID changed
+                        if (oldTariffGid != newTariffGid || oldTariffId != newTariffId)
+                        {
+                            InsertEditLogRow(cs.ConnectionString, gidno, "TARIFFGID", 
+                                oldTariffGid ?? "", 
+                                newTariffGid ?? "", 
+                                userId, versionLabel, "ImportInvoice");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -3788,12 +3892,15 @@ namespace scfs_erp.Controllers.Import
         private string FormatValForLoggingDetail(string fieldName, object value)
         {
             var formattedValue = FormatVal(value);
-            if (string.IsNullOrEmpty(formattedValue)) return formattedValue;
-
+            
             try
             {
                 if (fieldName.Equals("TARIFFMID", StringComparison.OrdinalIgnoreCase))
                 {
+                    // Handle null or empty values - return empty string to show old value was null/0
+                    if (string.IsNullOrEmpty(formattedValue) || formattedValue == "0")
+                        return "";
+                    
                     int tariffId;
                     if (int.TryParse(formattedValue, out tariffId) && tariffId > 0)
                     {
@@ -3801,6 +3908,8 @@ namespace scfs_erp.Controllers.Import
                         if (tariff != null && !string.IsNullOrEmpty(tariff.TARIFFMDESC))
                             return tariff.TARIFFMDESC;
                     }
+                    // If lookup fails, return the ID value
+                    return formattedValue;
                 }
                 else if (fieldName.Equals("TRANOTYPE", StringComparison.OrdinalIgnoreCase))
                 {
@@ -3929,6 +4038,53 @@ namespace scfs_erp.Controllers.Import
             return decimal.TryParse(Convert.ToString(v), out parsed) ? parsed : (decimal?)null;
         }
 
+        private static Dictionary<string, string> GetV0BaselineValues(string connectionString, string gidno, string modules)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                using (var sql = new SqlConnection(connectionString))
+                {
+                    sql.Open();
+                    using (var cmd = new SqlCommand(@"
+                        SELECT [FieldName], [NewValue]
+                        FROM [dbo].[GateInDetailEditLog]
+                        WHERE [GIDNO] = @GIDNO 
+                        AND [Modules] = @Modules
+                        AND (RTRIM(LTRIM([Version])) = @VLower 
+                             OR RTRIM(LTRIM([Version])) = @VUpper 
+                             OR RTRIM(LTRIM([Version])) = '0' 
+                             OR RTRIM(LTRIM([Version])) = 'V0')", sql))
+                    {
+                        cmd.Parameters.AddWithValue("@GIDNO", gidno);
+                        cmd.Parameters.AddWithValue("@Modules", modules);
+                        var baselineVerLower = "v0-" + gidno;
+                        var baselineVerUpper = "V0-" + gidno;
+                        cmd.Parameters.AddWithValue("@VLower", baselineVerLower);
+                        cmd.Parameters.AddWithValue("@VUpper", baselineVerUpper);
+                        
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                var fieldName = reader["FieldName"]?.ToString();
+                                var newValue = reader["NewValue"]?.ToString();
+                                if (!string.IsNullOrEmpty(fieldName))
+                                {
+                                    result[fieldName] = newValue ?? "";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"GetV0BaselineValues failed: {ex.Message}");
+            }
+            return result;
+        }
+
         private static void InsertEditLogRow(string connectionString, string gidno, string fieldName, string oldValue, string newValue, string changedBy, string versionLabel, string modules)
         {
             try
@@ -3981,7 +4137,18 @@ namespace scfs_erp.Controllers.Import
                     if (exists) return;
                 }
 
-                InsertBaselineSnapshot(snapshot, userId);
+                // Load TransactionDetail records for baseline
+                List<TransactionDetail> detailRecords = null;
+                try
+                {
+                    detailRecords = context.transactiondetail.AsNoTracking().Where(x => x.TRANMID == snapshot.TRANMID).ToList();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Failed to load TransactionDetail for baseline: {ex.Message}");
+                }
+
+                InsertBaselineSnapshot(snapshot, userId, detailRecords);
             }
             catch (Exception ex)
             {
@@ -3989,7 +4156,7 @@ namespace scfs_erp.Controllers.Import
             }
         }
 
-        private void InsertBaselineSnapshot(TransactionMaster snapshot, string userId)
+        private void InsertBaselineSnapshot(TransactionMaster snapshot, string userId, List<TransactionDetail> detailRecords = null)
         {
             var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
             if (cs == null || string.IsNullOrWhiteSpace(cs.ConnectionString)) return;
@@ -4054,6 +4221,121 @@ namespace scfs_erp.Controllers.Import
 
                 var newVal = FormatValForLogging(p.Name, valObj);
                 InsertEditLogRow(cs.ConnectionString, gidno, p.Name, null, newVal, userId, baselineVer, "ImportInvoice");
+            }
+
+            // Log TransactionDetail records (including TARIFFMID)
+            if (detailRecords != null && detailRecords.Count > 0)
+            {
+                foreach (var detail in detailRecords)
+                {
+                    InsertBaselineSnapshotDetail(detail, gidno, userId, baselineVer, cs.ConnectionString);
+                }
+            }
+        }
+
+        private void InsertBaselineSnapshotDetail(TransactionDetail snapshot, string gidno, string userId, string baselineVer, string connectionString)
+        {
+            var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "TRANDID", "TRANMID", "BILLEDID", "SLABTID", "TRANDREFID",
+                "TRANIDATE", "TRANSDATE", "TRANEDATE",
+                "TRANVHLFROM", "TRANVHLTO", "DISPSTATUS", "STFDID", "SBDID", "TRANDAID",
+                "RCOL1", "RCOL2", "RCOL3", "RCOL4", "RCOL5", "RCOL6", "RCOL7",
+                "RAMT1", "RAMT2", "RAMT3", "RAMT4", "RAMT5", "RAMT6", "RAMT7",
+                "RCAMT1", "RCAMT2", "RCAMT3", "RCAMT4", "RCAMT5", "RCAMT6", "RCAMT7",
+                "TRANDQTY", "TRANDRATE", "TRANDWGHT", "TRANDNOP",
+                "TRANDEAMT", "TRANDFAMT", "TRANDPAMT", "TRANDAAMT", "TRANDNAMT",
+                "TRANDHAMT", "TRAND_COVID_DISC_AMT", "TRANDADONAMT",
+                "TRAND_STRG_CGST_AMT", "TRAND_STRG_SGST_AMT", "TRAND_STRG_IGST_AMT",
+                "TRAND_HANDL_CGST_AMT", "TRAND_HANDL_SGST_AMT", "TRAND_HANDL_IGST_AMT",
+                "TRAND_HANDL_CGST_EXPRN", "TRAND_HANDL_SGST_EXPRN", "TRAND_HANDL_IGST_EXPRN"
+            };
+
+            var props = typeof(TransactionDetail).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            foreach (var p in props)
+            {
+                if (!p.CanRead) continue;
+                if (p.PropertyType.IsClass && p.PropertyType != typeof(string) && !p.PropertyType.IsValueType) continue;
+                if (exclude.Contains(p.Name)) continue;
+
+                var valObj = p.GetValue(snapshot, null);
+                var type = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+
+                // Always log TARIFFMID even if 0, to capture original state
+                bool shouldLog = false;
+                if (p.Name.Equals("TARIFFMID", StringComparison.OrdinalIgnoreCase))
+                {
+                    shouldLog = true; // Always log TARIFFMID
+                }
+                else if (type == typeof(string))
+                {
+                    var s = (Convert.ToString(valObj) ?? string.Empty).Trim();
+                    bool isDefault = string.IsNullOrEmpty(s) || s == "-" || s == "0" || s == "0.0" || s == "0.00" || s == "0.000" || s == "0.0000";
+                    if (isDefault) continue;
+                    shouldLog = true;
+                }
+                else if (type == typeof(int) || type == typeof(long) || type == typeof(short))
+                {
+                    var i = Convert.ToInt64(valObj ?? 0);
+                    if (i == 0 && !p.Name.Equals("TARIFFMID", StringComparison.OrdinalIgnoreCase)) continue;
+                    shouldLog = true;
+                }
+                else if (type == typeof(decimal))
+                {
+                    var d = ToNullableDecimal(valObj) ?? 0m;
+                    if (d == 0m) continue;
+                    shouldLog = true;
+                }
+                else if (type == typeof(double) || type == typeof(float))
+                {
+                    var d = Convert.ToDouble(valObj ?? 0.0);
+                    if (Math.Abs(d) < 1e-9) continue;
+                    shouldLog = true;
+                }
+                else
+                {
+                    shouldLog = true;
+                }
+
+                if (shouldLog)
+                {
+                    var newVal = FormatValForLoggingDetail(p.Name, valObj);
+                    InsertEditLogRow(connectionString, gidno, p.Name, null, newVal ?? "", userId, baselineVer, "ImportInvoice");
+
+                    // If TARIFFMID is logged, also log TARIFFGID
+                    if (p.Name.Equals("TARIFFMID", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            int tariffId = 0;
+                            if (valObj != null)
+                            {
+                                if (valObj is int) tariffId = (int)valObj;
+                                else if (valObj is short) tariffId = (short)valObj;
+                                else if (valObj is long) tariffId = (int)(long)valObj;
+                                else int.TryParse(Convert.ToString(valObj), out tariffId);
+                            }
+
+                            string tariffGid = "";
+                            if (tariffId > 0)
+                            {
+                                var tariff = context.tariffmasters.FirstOrDefault(t => t.TARIFFMID == tariffId);
+                                if (tariff != null && tariff.TGID.HasValue)
+                                {
+                                    var tariffGrp = context.tariffgroupmasters.FirstOrDefault(tg => tg.TGID == tariff.TGID.Value);
+                                    if (tariffGrp != null && !string.IsNullOrEmpty(tariffGrp.TGDESC))
+                                        tariffGid = tariffGrp.TGDESC;
+                                }
+                            }
+
+                            InsertEditLogRow(connectionString, gidno, "TARIFFGID", null, tariffGid ?? "", userId, baselineVer, "ImportInvoice");
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Failed to log TARIFFGID in baseline: {ex.Message}");
+                        }
+                    }
+                }
             }
         }
     }
