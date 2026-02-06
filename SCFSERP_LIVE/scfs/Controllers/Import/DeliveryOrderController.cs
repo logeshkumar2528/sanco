@@ -372,6 +372,10 @@ namespace scfs_erp.Controllers.Import
                                     if (savedRecord != null)
                                     {
                                         LogDeliveryOrderEdits(original, savedRecord, Session["CUSRID"] != null ? Session["CUSRID"].ToString() : "");
+                                        
+                                        // Log additional fields from related tables
+                                        LogAdditionalDeliveryOrderFields(DOMID, F_Form, Session["CUSRID"] != null ? Session["CUSRID"].ToString() : "");
+                                        
                                         System.Diagnostics.Debug.WriteLine($"LogDeliveryOrderEdits completed successfully");
                                     }
                                     else
@@ -564,10 +568,40 @@ namespace scfs_erp.Controllers.Import
             // Apply friendly name mappings
             try
             {
+                var fieldMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    {"DODATE", "Date"},
+                    {"DOTIME", "Time"},
+                    {"DONO", "DO No"},
+                    {"DODNO", "DO Document No"},
+                    {"DOREFID", "CHA ID"},
+                    {"DOREFNAME", "CHA Name"},
+                    {"DOREFNO", "Reference Number"},
+                    {"DOREFDATE", "Reference Date"},
+                    {"DOMODE", "Payment Mode"},
+                    {"DOMODEDETL", "Payment Mode Detail"},
+                    {"DOREFBNAME", "Reference Bank Name"},
+                    {"DOREFAMT", "Amount"},
+                    {"TARIFFMID", "Tariff"},
+                    {"TARIFFGROUP", "Tariff Group"},
+                    {"BANKMID", "Bank"},
+                    {"DPAIDNO", "Duty Paid No"},
+                    {"DPAIDAMT", "Duty Paid Amount"},
+                    {"DOVDATE", "Validity Date"},
+                    {"DONARTN", "Narration"},
+                    {"DORMKS", "Remarks"},
+                    {"DISPSTATUS", "Status"}
+                };
+
                 Func<string, string> Friendly = field =>
                 {
                     if (string.IsNullOrWhiteSpace(field)) return field;
-                    // Add field name mappings for DeliveryOrder if needed
+                    
+                    // Check if we have a specific mapping
+                    if (fieldMap.ContainsKey(field))
+                        return fieldMap[field];
+                    
+                    // Otherwise, just replace underscores with spaces
                     return field.Replace("_", " ").Trim();
                 };
 
@@ -805,6 +839,7 @@ namespace scfs_erp.Controllers.Import
                 var dictBank = context.bankmasters.ToDictionary(x => x.BANKMID, x => x.BANKMDESC);
                 var dictCate = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
                 var dictTariff = context.tariffmasters.ToDictionary(x => x.TARIFFMID, x => x.TARIFFMDESC);
+                var dictTariffGroup = context.tariffgroupmasters.ToDictionary(x => x.TGID, x => x.TGDESC);
                 var dictMode = context.transactionmodemaster.ToDictionary(x => x.TRANMODE, x => x.TRANMODEDETL);
 
                 Func<string, string, string> Map = (field, val) =>
@@ -818,11 +853,28 @@ namespace scfs_erp.Controllers.Import
                         if (field == "DOREFID" && int.TryParse(val, out id) && dictCate.ContainsKey(id))
                             return dictCate[id];
                         if (field == "TARIFFMID" && int.TryParse(val, out id) && dictTariff.ContainsKey(id))
-                            return dictTariff[id];
+                        {
+                            var tariffDesc = dictTariff[id];
+                            // Also try to get Tariff Group
+                            var tariff = context.tariffmasters.FirstOrDefault(x => x.TARIFFMID == id);
+                            if (tariff != null && tariff.TGID.HasValue && tariff.TGID.Value > 0 && dictTariffGroup.ContainsKey(tariff.TGID.Value))
+                            {
+                                return $"{tariffDesc} (Group: {dictTariffGroup[tariff.TGID.Value]})";
+                            }
+                            return tariffDesc;
+                        }
+                        if (field == "TARIFFGROUP")
+                        {
+                            // TARIFFGROUP is already stored as description in the log, so return as-is
+                            return val;
+                        }
                         if (field == "DOMODE" && int.TryParse(val, out id) && dictMode.ContainsKey(id))
                             return dictMode[id];
                         if (field == "DISPSTATUS")
                             return val == "1" ? "CANCELLED" : val == "0" ? "INBOOKS" : val;
+                        // DPAIDNO, DPAIDAMT, DOVDATE are already stored as readable values, return as-is
+                        if (field == "DPAIDNO" || field == "DPAIDAMT" || field == "DOVDATE")
+                            return val;
                     }
                     catch { }
                     return val;
@@ -834,11 +886,15 @@ namespace scfs_erp.Controllers.Import
                     // DeliveryOrder field name mappings
                     var fieldNameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                     {
-                        {"DODATE", "Date"}, {"DOTIME", "Time"}, {"DONO", "No"}, {"DODNO", "DO Number"},
-                        {"DOREFID", "CHA"}, {"DOREFNAME", "CHA Name"}, {"TARIFFMID", "Tariff"},
-                        {"DOMODE", "Mode"}, {"DOMODEDETL", "Mode Detail"}, {"DOREFAMT", "Amount"},
+                        {"DODATE", "Date"}, {"DOTIME", "Time"}, {"DONO", "DO No"}, {"DODNO", "DO Document No"},
+                        {"DOREFID", "CHA ID"}, {"DOREFNAME", "CHA Name"}, {"TARIFFMID", "Tariff"},
+                        {"TARIFFGROUP", "Tariff Group"},
+                        {"DOMODE", "Payment Mode"}, {"DOMODEDETL", "Payment Mode Detail"}, {"DOREFAMT", "Amount"},
                         {"DOREFNO", "Reference Number"}, {"DOREFDATE", "Reference Date"},
-                        {"DOREFBNAME", "Bank Name"}, {"BANKMID", "Bank"}, {"DISPSTATUS", "Status"},
+                        {"DOREFBNAME", "Reference Bank Name"}, {"BANKMID", "Bank"},
+                        {"DPAIDNO", "Duty Paid No"}, {"DPAIDAMT", "Duty Paid Amount"},
+                        {"DOVDATE", "Validity Date"},
+                        {"DONARTN", "Narration"}, {"DORMKS", "Remarks"}, {"DISPSTATUS", "Status"},
                         {"PRCSDATE", "Process Date"}
                     };
                     if (fieldNameMap.ContainsKey(field)) return fieldNameMap[field];
@@ -1104,7 +1160,19 @@ namespace scfs_erp.Controllers.Import
                 else if (fieldName == "TARIFFMID" && int.TryParse(formattedValue, out lookupId))
                 {
                     var tariff = context.tariffmasters.FirstOrDefault(x => x.TARIFFMID == lookupId);
-                    if (tariff != null) return tariff.TARIFFMDESC;
+                    if (tariff != null)
+                    {
+                        // Also get Tariff Group name if available
+                        if (tariff.TGID.HasValue && tariff.TGID.Value > 0)
+                        {
+                            var tariffGroup = context.tariffgroupmasters.FirstOrDefault(x => x.TGID == tariff.TGID.Value);
+                            if (tariffGroup != null)
+                            {
+                                return $"{tariff.TARIFFMDESC} (Group: {tariffGroup.TGDESC})";
+                            }
+                        }
+                        return tariff.TARIFFMDESC;
+                    }
                 }
                 else if (fieldName == "DOMODE" && int.TryParse(formattedValue, out lookupId))
                 {
@@ -1170,6 +1238,136 @@ namespace scfs_erp.Controllers.Import
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"InsertEditLogRow failed: {ex.Message}");
+            }
+        }
+
+        private void LogAdditionalDeliveryOrderFields(int domid, FormCollection form, string userId)
+        {
+            try
+            {
+                var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+                if (cs == null || string.IsNullOrWhiteSpace(cs.ConnectionString)) return;
+
+                // Get DONO for GIDNO
+                var doRecord = context.DeliveryOrderMasters.AsNoTracking().FirstOrDefault(x => x.DOMID == domid);
+                if (doRecord == null) return;
+
+                var gidno = doRecord.DONO > 0 ? doRecord.DONO.ToString() : domid.ToString();
+
+                // Get the current version number
+                int nextVersion = 1;
+                try
+                {
+                    using (var sql = new SqlConnection(cs.ConnectionString))
+                    using (var cmd = new SqlCommand(@"
+                        SELECT ISNULL(
+                            MAX(TRY_CAST(
+                                SUBSTRING([Version], 2, 
+                                    CASE WHEN CHARINDEX('-', [Version]) > 0 
+                                         THEN CHARINDEX('-', [Version]) - 2 
+                                         ELSE LEN([Version]) - 1
+                                    END
+                                ) AS INT)
+                            ), 0)
+                        FROM [dbo].[GateInDetailEditLog]
+                        WHERE [GIDNO] = @GIDNO AND [Modules] = 'DeliveryOrder'", sql))
+                    {
+                        cmd.Parameters.AddWithValue("@GIDNO", gidno);
+                        sql.Open();
+                        var obj = cmd.ExecuteScalar();
+                        if (obj != null && obj != DBNull.Value)
+                            nextVersion = Convert.ToInt32(obj);
+                    }
+                }
+                catch { }
+
+                var versionLabel = $"V{nextVersion}-{gidno}";
+
+                // 1. Log Tariff Group changes (derived from TARIFFMID)
+                if (form["TARIFFMID"] != null && int.TryParse(form["TARIFFMID"], out int newTariffMid))
+                {
+                    var oldTariffMid = doRecord.TARIFFMID;
+                    if (oldTariffMid != newTariffMid)
+                    {
+                        string oldTariffGroup = "";
+                        string newTariffGroup = "";
+
+                        if (oldTariffMid > 0)
+                        {
+                            var oldTariff = context.tariffmasters.FirstOrDefault(x => x.TARIFFMID == oldTariffMid);
+                            if (oldTariff != null && oldTariff.TGID.HasValue && oldTariff.TGID.Value > 0)
+                            {
+                                var oldTg = context.tariffgroupmasters.FirstOrDefault(x => x.TGID == oldTariff.TGID.Value);
+                                if (oldTg != null) oldTariffGroup = oldTg.TGDESC;
+                            }
+                        }
+
+                        if (newTariffMid > 0)
+                        {
+                            var newTariff = context.tariffmasters.FirstOrDefault(x => x.TARIFFMID == newTariffMid);
+                            if (newTariff != null && newTariff.TGID.HasValue && newTariff.TGID.Value > 0)
+                            {
+                                var newTg = context.tariffgroupmasters.FirstOrDefault(x => x.TGID == newTariff.TGID.Value);
+                                if (newTg != null) newTariffGroup = newTg.TGDESC;
+                            }
+                        }
+
+                        if (oldTariffGroup != newTariffGroup && !string.IsNullOrEmpty(newTariffGroup))
+                        {
+                            InsertEditLogRow(cs.ConnectionString, gidno, "TARIFFGROUP", oldTariffGroup, newTariffGroup, userId, versionLabel, "DeliveryOrder");
+                        }
+                    }
+                }
+
+                // 2. Log Duty Paid No and Amount (from BILLENTRYMASTER)
+                if (form["BILLEMID"] != null && int.TryParse(form["BILLEMID"], out int billemid) && billemid > 0)
+                {
+                    // Get old values from database
+                    var oldBillEntry = context.Database.SqlQuery<BillEntryMaster>(
+                        "SELECT DPAIDNO, DPAIDAMT FROM BILLENTRYMASTER WHERE BILLEMID = @p0", billemid).FirstOrDefault();
+
+                    if (oldBillEntry != null)
+                    {
+                        string oldDpaidNo = oldBillEntry.DPAIDNO?.ToString() ?? "";
+                        decimal oldDpaidAmt = oldBillEntry.DPAIDAMT;
+
+                        string newDpaidNo = form["F_DPAIDNO"]?.ToString() ?? "";
+                        decimal newDpaidAmt = 0m;
+                        if (form["F_DPAIDAMT"] != null)
+                            decimal.TryParse(form["F_DPAIDAMT"], out newDpaidAmt);
+
+                        if (oldDpaidNo != newDpaidNo)
+                        {
+                            InsertEditLogRow(cs.ConnectionString, gidno, "DPAIDNO", oldDpaidNo, newDpaidNo, userId, versionLabel, "DeliveryOrder");
+                        }
+
+                        if (oldDpaidAmt != newDpaidAmt)
+                        {
+                            InsertEditLogRow(cs.ConnectionString, gidno, "DPAIDAMT", oldDpaidAmt.ToString("0.00"), newDpaidAmt.ToString("0.00"), userId, versionLabel, "DeliveryOrder");
+                        }
+                    }
+                }
+
+                // 3. Log Validity Date (from DELIVERYORDERDETAIL)
+                if (form["detaildata[0].DOVDATE"] != null && DateTime.TryParse(form["detaildata[0].DOVDATE"], out DateTime newValDate))
+                {
+                    var oldDetail = context.DeliveryOrderDetails.AsNoTracking().FirstOrDefault(x => x.DOMID == domid);
+                    if (oldDetail != null)
+                    {
+                        var oldValDate = oldDetail.DOVDATE;
+                        if (oldValDate.Date != newValDate.Date)
+                        {
+                            InsertEditLogRow(cs.ConnectionString, gidno, "DOVDATE", 
+                                oldValDate.ToString("yyyy-MM-dd"), 
+                                newValDate.ToString("yyyy-MM-dd"), 
+                                userId, versionLabel, "DeliveryOrder");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"LogAdditionalDeliveryOrderFields failed: {ex.Message}");
             }
         }
 
