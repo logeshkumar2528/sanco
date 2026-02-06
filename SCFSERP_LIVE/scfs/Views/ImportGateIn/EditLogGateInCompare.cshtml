@@ -355,7 +355,7 @@
         "Handling Taxable Amount", "HANDL_TAXABLE_AMT", // ImportInvoice - exclude Handling Taxable Amount
         "Pulse Storage Type", "TRAN_PULSE_STRG_TYPE", // ImportInvoice - exclude Pulse Storage Type
         // ExportManualBill - exclude removed fields
-        "TRANREFID", "CHA", // ExportManualBill - exclude CHA ID (show name only)
+        "TRANREFID", // ExportManualBill - exclude CHA ID (show name only via TRANREFNAME)
         "TRANAMTWRDS", "Amount in Words", // ExportManualBill - exclude Amount in Words
         "TRANLMDATE", "Lorry Memo Date", // ExportManualBill - exclude Lorry Memo Date
         "TRANLSDATE", "Lorry Slip Date", // ExportManualBill - exclude Lorry Slip Date
@@ -363,6 +363,7 @@
         "STRG_IGST_AMT", "STRG_IGST_EXPRN", // ExportManualBill - exclude Storage IGST fields
         "HANDL_TAXABLE_AMT", "STRG_TAXABLE_AMT", "HANDL_HSNCODE", "STRG_HSNCODE", // ExportManualBill - exclude Taxable Amount and HSN Code
         "Handling SGST Amount", "Handling CGST Amount", "Handling SGST %", "Handling CGST %", "Handling IGST %", "Handling IGST Amount", // ExportManualBill - exclude friendly names
+        "TRANMODEDETL", "Mode Detail", // ExportManualBill - exclude Mode Detail
         "Storage IGST Amount", "Storage IGST %", "Handling Taxable Amount", "Storage Taxable Amount", "Handling HSN Code", "Storage HSN Code", // ExportManualBill - exclude friendly names
         // StuffingBill - exclude removed fields
         "TRANHAMT", "Handling Amount", "TRANLMDATE", "TRANLSDATE", "TRANNARTN", "Narration", "TRANREFBNAME", "Bank", // StuffingBill - exclude Handling Amount, Lorry dates, Narration, and duplicate Bank
@@ -675,8 +676,6 @@
                                 f.Equals("STRG_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
                                 f.Equals("HANDL_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
                                 f.Equals("STRG_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
-                                f.Equals("CHA", StringComparison.OrdinalIgnoreCase) ||
-                                f.Equals("Bank", StringComparison.OrdinalIgnoreCase) ||
                                 f.Equals("Amount in Words", StringComparison.OrdinalIgnoreCase) ||
                                 f.Equals("Lorry Memo Date", StringComparison.OrdinalIgnoreCase) ||
                                 f.Equals("Lorry Slip Date", StringComparison.OrdinalIgnoreCase) ||

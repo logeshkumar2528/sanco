@@ -1941,8 +1941,10 @@ namespace scfs_erp.Controllers.Export
                         rowFieldNameA.Equals("TRANLSDATE", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("HANDL_SGST_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("HANDL_CGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("HANDL_IGST_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("HANDL_SGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("HANDL_CGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("HANDL_IGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("STRG_CGST_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("STRG_SGST_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("STRG_SGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
@@ -1951,15 +1953,17 @@ namespace scfs_erp.Controllers.Export
                         rowFieldNameA.Equals("STRG_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("HANDL_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("STRG_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
-                        rowFieldNameA.Equals("CHA", StringComparison.OrdinalIgnoreCase) ||
-                        rowFieldNameA.Equals("Bank", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("Amount in Words", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("Lorry Memo Date", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("Lorry Slip Date", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("Handling SGST Amount", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("Handling CGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Handling IGST Amount", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("Handling SGST %", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("Handling CGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Handling IGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("TRANMODEDETL", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Mode Detail", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("Storage CGST Amount", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("Storage SGST Amount", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("Storage SGST %", StringComparison.OrdinalIgnoreCase) ||
@@ -1985,8 +1989,10 @@ namespace scfs_erp.Controllers.Export
                         rowFieldNameB.Equals("TRANLSDATE", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("HANDL_SGST_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("HANDL_CGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("HANDL_IGST_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("HANDL_SGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("HANDL_CGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("HANDL_IGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("STRG_CGST_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("STRG_SGST_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("STRG_SGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
@@ -1995,15 +2001,17 @@ namespace scfs_erp.Controllers.Export
                         rowFieldNameB.Equals("STRG_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("HANDL_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("STRG_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
-                        rowFieldNameB.Equals("CHA", StringComparison.OrdinalIgnoreCase) ||
-                        rowFieldNameB.Equals("Bank", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("Amount in Words", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("Lorry Memo Date", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("Lorry Slip Date", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("Handling SGST Amount", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("Handling CGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Handling IGST Amount", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("Handling SGST %", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("Handling CGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Handling IGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("TRANMODEDETL", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Mode Detail", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("Storage CGST Amount", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("Storage SGST Amount", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("Storage SGST %", StringComparison.OrdinalIgnoreCase) ||
