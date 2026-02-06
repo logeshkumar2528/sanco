@@ -588,14 +588,15 @@
                             var va = dictA.ContainsKey(f) ? dictA[f] : "";
                             var vb = dictB.ContainsKey(f) ? dictB[f] : "";
                             
-                            // Check if V0 only has "INITIAL" marker (no actual field values)
-                            bool v0HasOnlyInitial = (isVersionAV0 && (va == "Initial State" || va == "" || f == "INITIAL")) ||
-                                                   (isVersionBV0 && (vb == "Initial State" || vb == "" || f == "INITIAL"));
-                            
                             // For the "Old Value" column (Version A), use Version A's value
                             // If Version A is v0 (baseline), use NewValue from v0 records
                             // If Version A is not v0, use NewValue (final state after that version's changes)
                             var valA = va;
+                            
+                            // For the "New Value" column (Version B), use Version B's value
+                            // If Version B is v0 (baseline), use NewValue from v0 records
+                            // If Version B is not v0, use NewValue (final state after that version's changes)
+                            var valB = vb;
                             
                             // Special handling for v0 comparisons:
                             if (isVersionAV0)
@@ -625,7 +626,7 @@
                             else if (isVersionBV0)
                             {
                                 // Version B is v0 - check if it has actual field values or just "INITIAL" marker
-                                if (string.IsNullOrEmpty(vb) || vb == "Initial State" || f == "INITIAL")
+                                if (string.IsNullOrEmpty(valB) || valB == "Initial State" || f == "INITIAL")
                                 {
                                     // V0 doesn't have this field (only has "INITIAL" marker)
                                     // Use Version A's value as the current state
@@ -659,16 +660,6 @@
                                         valA = dictB_Old[f];
                                     }
                                 }
-                            }
-                            
-                            // For the "New Value" column (Version B), use Version B's value
-                            // If Version B is v0 (baseline), use NewValue from v0 records
-                            // If Version B is not v0, use NewValue (final state after that version's changes)
-                            var valB = vb;
-                            if (isVersionBV0 && (string.IsNullOrEmpty(valB) || valB == "Initial State" || f == "INITIAL"))
-                            {
-                                // V0 doesn't have this field - use Version A's value
-                                valB = va;
                             }
                             
                             // Normalize "NULL" string and other empty representations to empty
