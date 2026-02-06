@@ -326,7 +326,9 @@
         // Removed duplicate keys: STATEID, CATEAGSTNO, TRANIMPADDR1-4 already defined above
         {"STFBCATEAID", "Billing Location"}, {"STFBCHASTATEID", "Billing State"}, {"STFBCHAGSTNO", "Billing GST No"},
         {"STFBCHAADDR1", "Billing Address 1"}, {"STFBCHAADDR2", "Billing Address 2"}, {"STFBCHAADDR3", "Billing Address 3"}, {"STFBCHAADDR4", "Billing Address 4"},
-        {"STF_SBILL_RNO", "Shipping Bill No"}, {"STF_FORM13_RNO", "Form 13 No"}
+        {"STF_SBILL_RNO", "Shipping Bill No"}, {"STF_FORM13_RNO", "Form 13 No"},
+        // Stuffing detail fields
+        {"STFDNOP", "Nop"}, {"STFDQTY", "Weight"}, {"Detail.STFDNOP", "Nop"}, {"Detail.STFDQTY", "Weight"}
     };
     
     // Fields to always display (even if they're the same)
@@ -342,14 +344,15 @@
         "Sdptid", "SDPTID",
         "Status", "DISPSTATUS",
         "S.Amend / Mismatch", "GPSTYPE", "Status type",
-        "Weight", "GPWGHT"
+        "Weight", "GPWGHT", "STFDQTY",
+        "Nop", "STFDNOP", "NOP", "GPNOP"
     };
     
     // Fields to exclude from display
     var excludedFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "Valid Till Date", "EBNDEDATE", // ExBond GateIn - exclude Valid Till Date
-        "LCATEID", "LCATENAME", "STFMNAME", "STFBILLREFID", // Stuffing - exclude Labour details and duplicate CHA/Billing names
+        "LCATEID", "LCATENAME", "Labour Category Name", "STFMNAME", "STFBILLREFID", // Stuffing - exclude Labour details and duplicate CHA/Billing names
         "Open Sheet L Name", "OSMLNAME", // OpenSheet - exclude Open Sheet L Name
         "Inspection Type", "INSPTYPE", "Detail.Inspection Type", "Detail.INSPTYPE", // OpenSheet - exclude Inspection Type
         "Handling Taxable Amount", "HANDL_TAXABLE_AMT", // ImportInvoice - exclude Handling Taxable Amount
