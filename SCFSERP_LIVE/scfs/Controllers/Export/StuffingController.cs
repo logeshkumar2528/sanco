@@ -962,6 +962,11 @@ namespace scfs_erp.Controllers
                             return dictEOPT[id];
                         if (field == "SLABTID" && int.TryParse(val, out id) && dictSlab.ContainsKey(id))
                             return dictSlab[id];
+                        if (field == "STFBILLEDTO")
+                        {
+                            if (val == "0" || val == "1")
+                                return val == "1" ? "EXPORTER" : "CHA";
+                        }
                     }
                     catch { }
                     return val;
@@ -1086,6 +1091,11 @@ namespace scfs_erp.Controllers
                             return dictEOPT[id];
                         if (field == "SLABTID" && int.TryParse(val, out id) && dictSlab.ContainsKey(id))
                             return dictSlab[id];
+                        if (field == "STFBILLEDTO")
+                        {
+                            if (val == "0" || val == "1")
+                                return val == "1" ? "EXPORTER" : "CHA";
+                        }
                     }
                     catch { }
                     return val;
@@ -1127,8 +1137,9 @@ namespace scfs_erp.Controllers
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 {"STFMDATE", "Date"}, {"STFMTIME", "Date/Time"}, {"STFMDNO", "Stuffing Number"}, {"STFMNO", "No"},
-                {"CHAID", "CHA"}, {"STFMNAME", "Name"}, {"LCATEID", "Labour Category"}, {"LCATENAME", "Labour Category Name"},
+                {"CHAID", "CHA"}, {"STFMNAME", "Name"}, {"LCATEID", "Labour Category"},
                 {"EOPTID", "Operation Type"}, {"SLABTID", "Slab Type"}, {"STFBILLEDTO", "Billed To"},
+                {"STFDNOP", "Nop"}, {"STFDQTY", "Weight"},
                 {"STFBILLREFID", "Bill Reference"}, {"STFBILLREFNAME", "Bill Reference Name"},
                 {"STFCATEAID", "Location"}, {"STATEID", "State"}, {"CATEAGSTNO", "GST NO"},
                 {"STF_SBILL_RNO", "Shipping Bill RNO"}, {"STF_FORM13_RNO", "Form 13 RNO"},
@@ -1276,6 +1287,11 @@ namespace scfs_erp.Controllers
                 {
                     var slab = context.exportslabtypemaster.FirstOrDefault(x => x.SLABTID == lookupId);
                     if (slab != null) return slab.SLABTDESC;
+                }
+                else if (fieldName == "STFBILLEDTO")
+                {
+                    if (formattedValue == "0" || formattedValue == "1")
+                        return formattedValue == "1" ? "EXPORTER" : "CHA";
                 }
             }
             catch { }
