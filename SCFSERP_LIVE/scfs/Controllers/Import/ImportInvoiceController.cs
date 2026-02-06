@@ -3558,6 +3558,25 @@ namespace scfs_erp.Controllers.Import
             }
             catch { /* Best-effort mapping */ }
 
+            // Exclude specific fields from compare page display (using friendly names after mapping)
+            var excludeFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "Registration ID",
+                "Customer Group ID",
+                "Bill Reference No",
+                "Invoice OC1",
+                "Bill Type",
+                "Reference Name",
+                "Storage SGST %",
+                "Storage CGST %",
+                "Transaction Detail No",
+                "Transaction No"
+            };
+
+            // Filter out excluded fields from both lists (after friendly name conversion)
+            a = a.Where(row => !excludeFields.Contains(row.FieldName?.Trim() ?? "")).ToList();
+            b = b.Where(row => !excludeFields.Contains(row.FieldName?.Trim() ?? "")).ToList();
+
             ViewBag.GIDNO = gidnoString;
             ViewBag.VersionA = versionA;
             ViewBag.VersionB = versionB;
