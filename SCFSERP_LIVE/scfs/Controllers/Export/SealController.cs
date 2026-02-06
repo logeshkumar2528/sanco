@@ -1118,7 +1118,8 @@ namespace scfs_erp.Controllers.Export
                 {"TRANIMPADDR1", "Address 1"}, {"TRANIMPADDR2", "Address 2"}, {"TRANIMPADDR3", "Address 3"}, {"TRANIMPADDR4", "Address 4"},
                 {"STFBCATEAID", "Billed CHA Location"}, {"STFBCHAGSTNO", "Billed CHA GST NO"}, {"STFBCHASTATEID", "Billed CHA State"},
                 {"STFBCHAADDR1", "Billed CHA Address 1"}, {"STFBCHAADDR2", "Billed CHA Address 2"}, {"STFBCHAADDR3", "Billed CHA Address 3"}, {"STFBCHAADDR4", "Billed CHA Address 4"},
-                {"DISPSTATUS", "Status"}, {"PRCSDATE", "Process Date"}, {"CUSRID", "Created By"}, {"LMUSRID", "Last Modified By"}
+                {"DISPSTATUS", "Status"}, {"PRCSDATE", "Process Date"}, {"CUSRID", "Created By"}, {"LMUSRID", "Last Modified By"},
+                {"STFDNOP", "Nop"}, {"STFDQTY", "Weight"}, {"Detail.STFDNOP", "Nop"}, {"Detail.STFDQTY", "Weight"}
             };
         }
 

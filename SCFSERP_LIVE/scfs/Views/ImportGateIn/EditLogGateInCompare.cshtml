@@ -561,7 +561,18 @@
                                 continue;
                             }
                             
-                            if (!isStuffingBillAllowedField && (excludedFields.Contains(fieldName) || excludedFields.Contains(friendlyFieldName)))
+                            // For Seal module, always show Nop, Weight, and Billed To
+                            bool isSealAllowedField = module == "Seal" && (
+                                fieldName.Equals("STFDNOP", StringComparison.OrdinalIgnoreCase) ||
+                                fieldName.Equals("STFDQTY", StringComparison.OrdinalIgnoreCase) ||
+                                fieldName.Equals("STFBILLEDTO", StringComparison.OrdinalIgnoreCase) ||
+                                fieldName.Equals("Detail.STFDNOP", StringComparison.OrdinalIgnoreCase) ||
+                                fieldName.Equals("Detail.STFDQTY", StringComparison.OrdinalIgnoreCase) ||
+                                friendlyFieldName.Equals("Nop", StringComparison.OrdinalIgnoreCase) ||
+                                friendlyFieldName.Equals("Weight", StringComparison.OrdinalIgnoreCase) ||
+                                friendlyFieldName.Equals("Billed To", StringComparison.OrdinalIgnoreCase));
+                            
+                            if (!isStuffingBillAllowedField && !isSealAllowedField && (excludedFields.Contains(fieldName) || excludedFields.Contains(friendlyFieldName)))
                             {
                                 continue;
                             }
