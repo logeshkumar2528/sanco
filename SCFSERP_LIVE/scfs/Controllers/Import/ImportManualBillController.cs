@@ -2550,6 +2550,7 @@ namespace scfs_erp.Controllers.Import
                 var dictState = context.statemasters.ToDictionary(x => x.STATEID, x => x.STATEDESC);
                 var dictTallyCHA = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
                 var dictTallyCate = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
+                var dictAccountHead = context.accountheadmasters.ToDictionary(x => x.ACHEADID, x => x.ACHEADDESC);
 
                 Func<string, string, string> Map = (field, val) =>
                 {
@@ -2575,6 +2576,8 @@ namespace scfs_erp.Controllers.Import
                             return dictState[id];
                         if (field == "TRANTALLYCHAID" && int.TryParse(val, out id) && dictTallyCHA.ContainsKey(id))
                             return dictTallyCHA[id];
+                        if (field == "ACHEADID" && int.TryParse(val, out id) && dictAccountHead.ContainsKey(id))
+                            return dictAccountHead[id];
                         if (field == "DISPSTATUS")
                             return val == "1" ? "CANCELLED" : val == "0" ? "INBOOKS" : val;
                     }
@@ -2609,7 +2612,6 @@ namespace scfs_erp.Controllers.Import
                         rowFieldName.Equals("STRG_CGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("HANDL_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("STRG_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
-                        rowFieldName.Equals("HANDL_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("STRG_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("CHA", StringComparison.OrdinalIgnoreCase) && row.FieldName.Equals("TRANREFID", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("Bank", StringComparison.OrdinalIgnoreCase) && row.FieldName.Equals("TRANREFBNAME", StringComparison.OrdinalIgnoreCase) ||
@@ -2757,6 +2759,7 @@ namespace scfs_erp.Controllers.Import
                 var dictState = context.statemasters.ToDictionary(x => x.STATEID, x => x.STATEDESC);
                 var dictTallyCHA = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
                 var dictTallyCate = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
+                var dictAccountHead = context.accountheadmasters.ToDictionary(x => x.ACHEADID, x => x.ACHEADDESC);
 
                 Func<string, string, string> Map = (field, val) =>
                 {
@@ -2782,6 +2785,8 @@ namespace scfs_erp.Controllers.Import
                             return dictState[id];
                         if (field == "TRANTALLYCHAID" && int.TryParse(val, out id) && dictTallyCHA.ContainsKey(id))
                             return dictTallyCHA[id];
+                        if (field == "ACHEADID" && int.TryParse(val, out id) && dictAccountHead.ContainsKey(id))
+                            return dictAccountHead[id];
                         if (field == "DISPSTATUS")
                             return val == "1" ? "CANCELLED" : val == "0" ? "INBOOKS" : val;
                     }
@@ -2816,10 +2821,7 @@ namespace scfs_erp.Controllers.Import
                         rowFieldNameA.Equals("STRG_CGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("HANDL_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("STRG_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
-                        rowFieldNameA.Equals("HANDL_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("STRG_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
-                        rowFieldNameA.Equals("CHA", StringComparison.OrdinalIgnoreCase) ||
-                        rowFieldNameA.Equals("Bank", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("Amount in Words", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("Lorry Memo Date", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("Lorry Slip Date", StringComparison.OrdinalIgnoreCase) ||
@@ -2834,7 +2836,13 @@ namespace scfs_erp.Controllers.Import
                         rowFieldNameA.Equals("Handling Taxable Amount", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("Storage Taxable Amount", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("Handling HSN Code", StringComparison.OrdinalIgnoreCase) ||
-                        rowFieldNameA.Equals("Storage HSN Code", StringComparison.OrdinalIgnoreCase))
+                        rowFieldNameA.Equals("Storage HSN Code", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("HANDL_IGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("HANDL_IGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("TRANMODEDETL", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Handling IGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Handling IGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameA.Equals("Mode Detail", StringComparison.OrdinalIgnoreCase))
                     {
                         return false;
                     }
@@ -2860,10 +2868,7 @@ namespace scfs_erp.Controllers.Import
                         rowFieldNameB.Equals("STRG_CGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("HANDL_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("STRG_TAXABLE_AMT", StringComparison.OrdinalIgnoreCase) ||
-                        rowFieldNameB.Equals("HANDL_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("STRG_HSNCODE", StringComparison.OrdinalIgnoreCase) ||
-                        rowFieldNameB.Equals("CHA", StringComparison.OrdinalIgnoreCase) ||
-                        rowFieldNameB.Equals("Bank", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("Amount in Words", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("Lorry Memo Date", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("Lorry Slip Date", StringComparison.OrdinalIgnoreCase) ||
@@ -2878,7 +2883,13 @@ namespace scfs_erp.Controllers.Import
                         rowFieldNameB.Equals("Handling Taxable Amount", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("Storage Taxable Amount", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("Handling HSN Code", StringComparison.OrdinalIgnoreCase) ||
-                        rowFieldNameB.Equals("Storage HSN Code", StringComparison.OrdinalIgnoreCase))
+                        rowFieldNameB.Equals("Storage HSN Code", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("HANDL_IGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("HANDL_IGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("TRANMODEDETL", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Handling IGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Handling IGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldNameB.Equals("Mode Detail", StringComparison.OrdinalIgnoreCase))
                     {
                         return false;
                     }
@@ -2897,6 +2908,17 @@ namespace scfs_erp.Controllers.Import
                     row.NewValue = Map(row.FieldName, row.NewValue);
                     row.FieldName = Friendly(row.FieldName);
                 }
+                
+                // Filter out excluded fields by friendly name after conversion
+                var excludeFriendlyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    "Handling IGST %",
+                    "Handling IGST Amount",
+                    "Mode Detail"
+                };
+                
+                a = a.Where(row => !excludeFriendlyNames.Contains(row.FieldName?.Trim() ?? "")).ToList();
+                b = b.Where(row => !excludeFriendlyNames.Contains(row.FieldName?.Trim() ?? "")).ToList();
             }
             catch { /* Best-effort mapping */ }
 
@@ -2925,7 +2947,8 @@ namespace scfs_erp.Controllers.Import
                 // TRANREFBNAME removed - Bank field is already displayed via BANKMID
                 {"TRANTALLYCHANAME", "Tally CHA"}, {"TCATEAID", "Tally CHA Location"}, 
                 {"TCATEAGSTNO", "Tally CHA GST NO"}, {"TSTATEID", "State"}, {"TRANIMPADDR1", "Address 1"}, 
-                {"TRANIMPADDR2", "Address 2"}, {"TRANIMPADDR3", "Address 3"}, {"TRANIMPADDR4", "Address 4"}
+                {"TRANIMPADDR2", "Address 2"}, {"TRANIMPADDR3", "Address 3"}, {"TRANIMPADDR4", "Address 4"},
+                {"ACHEADID", "Account Head"}, {"HANDL_HSNCODE", "HSN Code"}, {"TRANDREFNAME", "Bill Description"}
             };
         }
 
