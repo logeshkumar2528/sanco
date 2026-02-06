@@ -1,4 +1,4 @@
-﻿using scfs.Data;
+using scfs.Data;
 using CrystalDecisions.CrystalReports.Engine;
 using CrystalDecisions.Shared;
 using scfs_erp.Context;
@@ -1669,6 +1669,7 @@ namespace scfs_erp.Controllers.Export
                 var dictState = context.statemasters.ToDictionary(x => x.STATEID, x => x.STATEDESC);
                 var dictTallyCHA = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
                 var dictTallyCate = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
+                var dictAccountHead = context.accountheadmasters.ToDictionary(x => x.ACHEADID, x => x.ACHEADDESC);
 
                 Func<string, string, string> Map = (field, val) =>
                 {
@@ -1694,6 +1695,10 @@ namespace scfs_erp.Controllers.Export
                             return dictState[id];
                         if (field == "TRANTALLYCHAID" && int.TryParse(val, out id) && dictTallyCHA.ContainsKey(id))
                             return dictTallyCHA[id];
+                        if (field == "ACHEADID" && int.TryParse(val, out id) && dictAccountHead.ContainsKey(id))
+                            return dictAccountHead[id];
+                        if (field == "Detail.ACHEADID" && int.TryParse(val, out id) && dictAccountHead.ContainsKey(id))
+                            return dictAccountHead[id];
                         if (field == "DISPSTATUS")
                             return val == "1" ? "CANCELLED" : val == "0" ? "INBOOKS" : val;
                     }
@@ -1720,8 +1725,10 @@ namespace scfs_erp.Controllers.Export
                         rowFieldName.Equals("TRANLSDATE", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("HANDL_SGST_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("HANDL_CGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("HANDL_IGST_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("HANDL_SGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("HANDL_CGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("HANDL_IGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("STRG_CGST_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("STRG_SGST_AMT", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("STRG_SGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
@@ -1737,8 +1744,10 @@ namespace scfs_erp.Controllers.Export
                         rowFieldName.Equals("Lorry Slip Date", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("Handling SGST Amount", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("Handling CGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Handling IGST Amount", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("Handling SGST %", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("Handling CGST %", StringComparison.OrdinalIgnoreCase) ||
+                        rowFieldName.Equals("Handling IGST %", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("Storage CGST Amount", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("Storage SGST Amount", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("Storage SGST %", StringComparison.OrdinalIgnoreCase) ||
@@ -1876,6 +1885,7 @@ namespace scfs_erp.Controllers.Export
                 var dictState = context.statemasters.ToDictionary(x => x.STATEID, x => x.STATEDESC);
                 var dictTallyCHA = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
                 var dictTallyCate = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
+                var dictAccountHead = context.accountheadmasters.ToDictionary(x => x.ACHEADID, x => x.ACHEADDESC);
 
                 Func<string, string, string> Map = (field, val) =>
                 {
@@ -1901,6 +1911,10 @@ namespace scfs_erp.Controllers.Export
                             return dictState[id];
                         if (field == "TRANTALLYCHAID" && int.TryParse(val, out id) && dictTallyCHA.ContainsKey(id))
                             return dictTallyCHA[id];
+                        if (field == "ACHEADID" && int.TryParse(val, out id) && dictAccountHead.ContainsKey(id))
+                            return dictAccountHead[id];
+                        if (field == "Detail.ACHEADID" && int.TryParse(val, out id) && dictAccountHead.ContainsKey(id))
+                            return dictAccountHead[id];
                         if (field == "DISPSTATUS")
                             return val == "1" ? "CANCELLED" : val == "0" ? "INBOOKS" : val;
                     }
@@ -2042,7 +2056,12 @@ namespace scfs_erp.Controllers.Export
                 {"TRANBTYPE", "Bill Type"}, {"TRANREFNO", "Number"}, {"TRANREFDATE", "Date"},
                 {"TRANTALLYCHANAME", "Tally CHA"}, {"TCATEAID", "Tally CHA Location"}, 
                 {"TCATEAGSTNO", "Tally CHA GST NO"}, {"TSTATEID", "State"}, {"TRANIMPADDR1", "Address 1"}, 
-                {"TRANIMPADDR2", "Address 2"}, {"TRANIMPADDR3", "Address 3"}, {"TRANIMPADDR4", "Address 4"}
+                {"TRANIMPADDR2", "Address 2"}, {"TRANIMPADDR3", "Address 3"}, {"TRANIMPADDR4", "Address 4"},
+                // Detail field mappings
+                {"Detail.ACHEADID", "Account Head"}, {"Detail.TRANDDESC", "Bill Description"},
+                {"Detail.TRANDREFNO", "HSN Code"}, {"Detail.TRANDGAMT", "Amount"},
+                {"ACHEADID", "Account Head"}, {"TRANDDESC", "Bill Description"},
+                {"TRANDREFNO", "HSN Code"}, {"TRANDREFNAME", "Bill Description"}
             };
         }
 
@@ -2073,8 +2092,8 @@ namespace scfs_erp.Controllers.Export
                 "TRANGSTNO", "TRANPAMT",
                 // Removed fields - no longer displayed
                 "TRANREFID", "TRANREFBNAME", "TRANAMTWRDS", "TRANLMDATE", "TRANLSDATE",
-                "HANDL_SGST_AMT", "HANDL_CGST_AMT", "HANDL_SGST_EXPRN", "HANDL_CGST_EXPRN",
-                "STRG_CGST_AMT", "STRG_SGST_AMT", "STRG_SGST_EXPRN", "STRG_CGST_EXPRN",
+                "HANDL_SGST_AMT", "HANDL_CGST_AMT", "HANDL_IGST_AMT", "HANDL_SGST_EXPRN", "HANDL_CGST_EXPRN", "HANDL_IGST_EXPRN",
+                "STRG_CGST_AMT", "STRG_SGST_AMT", "STRG_IGST_AMT", "STRG_SGST_EXPRN", "STRG_CGST_EXPRN", "STRG_IGST_EXPRN",
                 "HANDL_TAXABLE_AMT", "STRG_TAXABLE_AMT", "HANDL_HSNCODE", "STRG_HSNCODE",
                 "TRANTALLYCHAID"  // Tally CHA ID - exclude, only show TRANTALLYCHANAME
             };
