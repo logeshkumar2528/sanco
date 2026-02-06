@@ -2328,6 +2328,7 @@ namespace scfs_erp.Controllers.Export
                 var dictCate = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
                 var dictTariff = context.tariffmasters.ToDictionary(x => x.TARIFFMID, x => x.TARIFFMDESC);
                 var dictMode = context.transactionmodemaster.ToDictionary(x => x.TRANMODE, x => x.TRANMODEDETL);
+                var dictTariffGroup = context.ExportTariffGroupMasters.ToDictionary(x => x.TGID, x => x.TGDESC);
 
                 Func<string, string, string> Map = (field, val) =>
                 {
@@ -2341,6 +2342,8 @@ namespace scfs_erp.Controllers.Export
                             return dictCate[id];
                         if (field == "TARIFFMID" && int.TryParse(val, out id) && dictTariff.ContainsKey(id))
                             return dictTariff[id];
+                        if (field == "TARIFFGID" && int.TryParse(val, out id) && dictTariffGroup.ContainsKey(id))
+                            return dictTariffGroup[id];
                         if (field == "TRANMODE" && int.TryParse(val, out id) && dictMode.ContainsKey(id))
                             return dictMode[id];
                     }
@@ -2451,6 +2454,7 @@ namespace scfs_erp.Controllers.Export
                 var dictCate = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
                 var dictTariff = context.tariffmasters.ToDictionary(x => x.TARIFFMID, x => x.TARIFFMDESC);
                 var dictMode = context.transactionmodemaster.ToDictionary(x => x.TRANMODE, x => x.TRANMODEDETL);
+                var dictTariffGroup = context.ExportTariffGroupMasters.ToDictionary(x => x.TGID, x => x.TGDESC);
 
                 Func<string, string, string> Map = (field, val) =>
                 {
@@ -2464,6 +2468,8 @@ namespace scfs_erp.Controllers.Export
                             return dictCate[id];
                         if (field == "TARIFFMID" && int.TryParse(val, out id) && dictTariff.ContainsKey(id))
                             return dictTariff[id];
+                        if (field == "TARIFFGID" && int.TryParse(val, out id) && dictTariffGroup.ContainsKey(id))
+                            return dictTariffGroup[id];
                         if (field == "TRANMODE" && int.TryParse(val, out id) && dictMode.ContainsKey(id))
                             return dictMode[id];
                     }
@@ -2526,7 +2532,8 @@ namespace scfs_erp.Controllers.Export
                 {"TRANBILLREFNO", "Bill Reference No"}, {"TRANLMID", "Stuffing ID"}, {"TRANLMNO", "Stuffing No"},
                 {"TRANSAMT", "Storage Amount"}, {"TRANEAMT", "Energy Amount"},
                 {"TRANFAMT", "Fuel Amount"}, {"TRANPAMT", "PTI Amount"}, {"TRANTCAMT", "Total Charge Amount"},
-                {"TRAN_COVID_DISC_AMT", "COVID Discount Amount"}
+                {"TRAN_COVID_DISC_AMT", "COVID Discount Amount"},
+                {"TARIFFGID", "Tariff Group"}, {"TRANCFID", "Cost Factor details"}, {"TRANHAMT", "Handling"}
             };
         }
 
@@ -2663,6 +2670,11 @@ namespace scfs_erp.Controllers.Export
                 {
                     var tariff = context.tariffmasters.FirstOrDefault(x => x.TARIFFMID == lookupId);
                     if (tariff != null) return tariff.TARIFFMDESC;
+                }
+                else if (fieldName == "TARIFFGID" && int.TryParse(formattedValue, out lookupId))
+                {
+                    var tariffGroup = context.ExportTariffGroupMasters.FirstOrDefault(x => x.TGID == lookupId);
+                    if (tariffGroup != null) return tariffGroup.TGDESC;
                 }
                 else if (fieldName == "TRANMODE" && int.TryParse(formattedValue, out lookupId))
                 {

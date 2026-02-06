@@ -313,6 +313,8 @@
         {"TARIFFGID", "Tariff Group"}, {"TARIFFMID", "Tariff"}, {"TRANOTYPE", "Operation"},
         {"TRANVDATE", "Validity Date"}, {"TRANDPNO", "Duty Paid No."}, {"TRANDSAMT", "Storage(Calc)"},
         {"TRANCFID", "costfactor details"},
+        // StuffingBill fields
+        {"TRANHAMT", "Handling"},
         // DeliveryOrder fields
         {"DODATE", "DO Date"}, {"DOTIME", "DO Time"}, {"DODNO", "DO Number"}, {"DONO", "DO No"},
         {"DOREFID", "DO CHA"}, {"DOREFNAME", "DO CHA"},
@@ -369,11 +371,16 @@
         "TRANMODEDETL", "Mode Detail", // ExportManualBill - exclude Mode Detail
         "Storage IGST Amount", "Storage IGST %", "Handling Taxable Amount", "Storage Taxable Amount", "Handling HSN Code", "Storage HSN Code", // ExportManualBill - exclude friendly names
         // StuffingBill - exclude removed fields
-        "TRANHAMT", "Handling Amount", "TRANLMDATE", "TRANLSDATE", "TRANNARTN", "Narration", "TRANREFBNAME", "Bank", // StuffingBill - exclude Handling Amount, Lorry dates, Narration, and duplicate Bank
+        "TRANLMDATE", "TRANLSDATE", "TRANNARTN", "Narration", "TRANREFBNAME", // StuffingBill - exclude Lorry dates, Narration, and duplicate Bank (TRANREFBNAME, not BANKMID)
+        "STRG_SGST_AMT", "STRG_CGST_AMT", "Storage SGST Amount", "Storage CGST Amount", // StuffingBill - exclude Storage SGST and CGST Amount
+        "STRG_SGST_EXPRN", "STRG_CGST_EXPRN", "Storage SGST %", "Storage CGST %", // StuffingBill - exclude Storage SGST and CGST %
+        "TRANBTYPE", "Bill Type", // StuffingBill - exclude Bill Type
+        "TRANMODEDETL", "Mode Detail", // StuffingBill - exclude Mode Detail
+        "REGSTRID", "Tax Type", // StuffingBill - exclude Tax Type
         "GTRNSPRTNAME", "Other Transporter Name", "Other Transpoter Name", // Exclude Other Transporter Name field (including typo variant)
-        // ImportTruckOut - exclude unwanted fields
+        // ImportTruckOut - exclude unwanted fields (Status and DISPSTATUS are excluded only for ImportTruckOut via module-specific check)
         "Out Vessel ID", "OTDID", "Quantity", "GODQTY", "Gate Out O Type", "GODOTYPE", "Gate In Detail", "GIDID", 
-        "BOOKID", "CONTNRFID", "Gate Out C Type", "GODCTYPE", "Gate Out T Type", "GODTTYPE", "Status", "DISPSTATUS"
+        "BOOKID", "CONTNRFID", "Gate Out C Type", "GODCTYPE", "Gate Out T Type", "GODTTYPE"
     };
     
     Func<string, string> getFriendlyName = fieldName => 
@@ -527,7 +534,26 @@
                             // Filter out excluded fields
                             var fieldName = f ?? string.Empty;
                             var friendlyFieldName = getFriendlyName(fieldName);
-                            if (excludedFields.Contains(fieldName) || excludedFields.Contains(friendlyFieldName))
+                            
+                            // For StuffingBill, allow specific fields even if they're in excludedFields
+                            bool isStuffingBillAllowedField = module == "StuffingBill" && (
+                                fieldName.Equals("TARIFFGID", StringComparison.OrdinalIgnoreCase) ||
+                                fieldName.Equals("TARIFFMID", StringComparison.OrdinalIgnoreCase) ||
+                                fieldName.Equals("TRANCFID", StringComparison.OrdinalIgnoreCase) ||
+                                fieldName.Equals("BANKMID", StringComparison.OrdinalIgnoreCase) ||
+                                fieldName.Equals("DISPSTATUS", StringComparison.OrdinalIgnoreCase) ||
+                                fieldName.Equals("TRANHAMT", StringComparison.OrdinalIgnoreCase) ||
+                                friendlyFieldName.Equals("Tariff Group", StringComparison.OrdinalIgnoreCase) ||
+                                friendlyFieldName.Equals("Tariff", StringComparison.OrdinalIgnoreCase) ||
+                                friendlyFieldName.Equals("Cost Factor details", StringComparison.OrdinalIgnoreCase) ||
+                                friendlyFieldName.Equals("costfactor details", StringComparison.OrdinalIgnoreCase) ||
+                                friendlyFieldName.Equals("Bank", StringComparison.OrdinalIgnoreCase) ||
+                                friendlyFieldName.Equals("Status", StringComparison.OrdinalIgnoreCase) ||
+                                friendlyFieldName.Equals("Handling", StringComparison.OrdinalIgnoreCase) ||
+                                friendlyFieldName.Equals("Handling Amount", StringComparison.OrdinalIgnoreCase)
+                            );
+                            
+                            if (!isStuffingBillAllowedField && (excludedFields.Contains(fieldName) || excludedFields.Contains(friendlyFieldName)))
                             {
                                 continue;
                             }
@@ -694,6 +720,34 @@
                                 f.Equals("Storage Taxable Amount", StringComparison.OrdinalIgnoreCase) ||
                                 f.Equals("Handling HSN Code", StringComparison.OrdinalIgnoreCase) ||
                                 f.Equals("Storage HSN Code", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                continue;
+                            }
+                            
+                            // Skip StuffingBill removed fields
+                            if (module == "StuffingBill" && f != null && (
+                                f.Equals("STRG_SGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("STRG_CGST_AMT", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Storage SGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Storage CGST Amount", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("STRG_SGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("STRG_CGST_EXPRN", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Storage SGST %", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Storage CGST %", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("TRANBTYPE", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Bill Type", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("TRANMODEDETL", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Mode Detail", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("REGSTRID", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Tax Type", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                continue;
+                            }
+                            
+                            // Skip ImportTruckOut removed fields (Status and DISPSTATUS)
+                            if (module == "ImportTruckOut" && f != null && (
+                                f.Equals("Status", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("DISPSTATUS", StringComparison.OrdinalIgnoreCase)))
                             {
                                 continue;
                             }
