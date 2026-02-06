@@ -4487,30 +4487,10 @@ namespace scfs_erp.Controllers.Import
                 var valObj = p.GetValue(snapshot, null);
                 var type = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
 
-                if (type == typeof(string))
-                {
-                    var s = (Convert.ToString(valObj) ?? string.Empty).Trim();
-                    bool isDefault = string.IsNullOrEmpty(s) || s == "-" || s == "0" || s == "0.0" || s == "0.00" || s == "0.000" || s == "0.0000";
-                    if (isDefault) continue;
-                }
-                else if (type == typeof(int) || type == typeof(long) || type == typeof(short))
-                {
-                    var i = Convert.ToInt64(valObj ?? 0);
-                    if (i == 0) continue;
-                }
-                else if (type == typeof(decimal))
-                {
-                    var d = ToNullableDecimal(valObj) ?? 0m;
-                    if (d == 0m) continue;
-                }
-                else if (type == typeof(double) || type == typeof(float))
-                {
-                    var d = Convert.ToDouble(valObj ?? 0.0);
-                    if (Math.Abs(d) < 1e-9) continue;
-                }
-
+                // Always log ALL fields in baseline, even if empty, to ensure proper comparison later
+                // This ensures that when comparing V0 to V1, we can show the actual old value (even if empty)
                 var newVal = FormatValForLogging(p.Name, valObj);
-                InsertEditLogRowWithDedup(p.Name, null, newVal);
+                InsertEditLogRowWithDedup(p.Name, null, newVal ?? "");
             }
 
             // Log TransactionDetail records (including TARIFFMID)
@@ -4577,46 +4557,16 @@ namespace scfs_erp.Controllers.Import
                 var valObj = p.GetValue(snapshot, null);
                 var type = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
 
-                // Always log TARIFFMID even if 0, to capture original state
-                bool shouldLog = false;
-                if (p.Name.Equals("TARIFFMID", StringComparison.OrdinalIgnoreCase))
-                {
-                    shouldLog = true; // Always log TARIFFMID
-                }
-                else if (type == typeof(string))
-                {
-                    var s = (Convert.ToString(valObj) ?? string.Empty).Trim();
-                    bool isDefault = string.IsNullOrEmpty(s) || s == "-" || s == "0" || s == "0.0" || s == "0.00" || s == "0.000" || s == "0.0000";
-                    if (isDefault) continue;
-                    shouldLog = true;
-                }
-                else if (type == typeof(int) || type == typeof(long) || type == typeof(short))
-                {
-                    var i = Convert.ToInt64(valObj ?? 0);
-                    if (i == 0 && !p.Name.Equals("TARIFFMID", StringComparison.OrdinalIgnoreCase)) continue;
-                    shouldLog = true;
-                }
-                else if (type == typeof(decimal))
-                {
-                    var d = ToNullableDecimal(valObj) ?? 0m;
-                    if (d == 0m) continue;
-                    shouldLog = true;
-                }
-                else if (type == typeof(double) || type == typeof(float))
-                {
-                    var d = Convert.ToDouble(valObj ?? 0.0);
-                    if (Math.Abs(d) < 1e-9) continue;
-                    shouldLog = true;
-                }
-                else
-                {
-                    shouldLog = true;
-                }
-
-                if (shouldLog)
-                {
-                    var newVal = FormatValForLoggingDetail(p.Name, valObj);
-                    InsertEditLogRowWithDedup(p.Name, null, newVal ?? "");
+                // Always log ALL fields in baseline, even if empty, to ensure proper comparison later
+                // This ensures that when comparing V0 to V1, we can show the actual old value (even if empty)
+                bool shouldLog = true; // Log all fields by default
+                
+                // Format the value for logging (handles empty/null values)
+                var newVal = FormatValForLoggingDetail(p.Name, valObj);
+                
+                // Always log the field, even if the formatted value is empty
+                // This ensures V0 baseline has a record for every field, preventing "(not set)" in comparisons
+                InsertEditLogRowWithDedup(p.Name, null, newVal ?? "");
 
                     // If TARIFFMID is logged, also log TARIFFGID
                     if (p.Name.Equals("TARIFFMID", StringComparison.OrdinalIgnoreCase))
