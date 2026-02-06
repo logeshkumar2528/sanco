@@ -449,6 +449,13 @@
                                                 // Force display - skip exclusion check entirely
                                                 // GPETYPE must always be visible
                                             }
+                                            // For Seal module, exclude Labour Category Name
+                                            else if (module == "Seal" && (
+                                                fieldName.Equals("LCATENAME", StringComparison.OrdinalIgnoreCase) ||
+                                                friendlyFieldName.Equals("Labour Category Name", StringComparison.OrdinalIgnoreCase)))
+                                            {
+                                                continue;
+                                            }
                                             else if (excludedFields.Contains(fieldName) || excludedFields.Contains(friendlyFieldName))
                                             {
                                                 continue;

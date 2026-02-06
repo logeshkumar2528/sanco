@@ -553,6 +553,14 @@
                                 friendlyFieldName.Equals("Handling Amount", StringComparison.OrdinalIgnoreCase)
                             );
                             
+                            // For Seal module, exclude Labour Category Name
+                            if (module == "Seal" && (
+                                fieldName.Equals("LCATENAME", StringComparison.OrdinalIgnoreCase) ||
+                                friendlyFieldName.Equals("Labour Category Name", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                continue;
+                            }
+                            
                             if (!isStuffingBillAllowedField && (excludedFields.Contains(fieldName) || excludedFields.Contains(friendlyFieldName)))
                             {
                                 continue;
