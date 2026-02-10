@@ -3261,6 +3261,12 @@ namespace scfs_erp.Controllers.Import
                         case "TRANOTYPE":
                             var dictOperation = context.ImportDestuffSlipOperation.ToDictionary(x => x.OPRTYPE, x => x.OPRTYPEDESC);
                             return int.TryParse(val, out ival) && dictOperation.ContainsKey(ival) ? dictOperation[ival] : raw;
+                        case "TRANDSAMT":
+                        case "TRAN_PULSE_STRG_TYPE":
+                            // Storage(Calc): show Yes/No in edit log (support both stored 1/0 and Yes/No)
+                            if (val == "1" || val == "1.0" || val == "1.00") return "Yes";
+                            if (val == "0" || val == "0.0" || val == "0.00") return "No";
+                            return raw;
                         default:
                             return raw;
                     }
@@ -3464,6 +3470,12 @@ namespace scfs_erp.Controllers.Import
                         case "TRANOTYPE":
                             var dictOperation = context.ImportDestuffSlipOperation.ToDictionary(x => x.OPRTYPE, x => x.OPRTYPEDESC);
                             return int.TryParse(val, out ival) && dictOperation.ContainsKey(ival) ? dictOperation[ival] : raw;
+                        case "TRANDSAMT":
+                        case "TRAN_PULSE_STRG_TYPE":
+                            // Storage(Calc): show Yes/No in edit log (support both stored 1/0 and Yes/No)
+                            if (val == "1" || val == "1.0" || val == "1.00") return "Yes";
+                            if (val == "0" || val == "0.0" || val == "0.00") return "No";
+                            return raw;
                         default:
                             return raw;
                     }
@@ -4184,6 +4196,12 @@ namespace scfs_erp.Controllers.Import
                             return opType.OPRTYPEDESC;
                     }
                 }
+                else if (fieldName.Equals("TRANDSAMT", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Storage(Calc) detail: store Yes/No for edit log display
+                    if (formattedValue == "1" || formattedValue == "1.0" || formattedValue == "1.00") return "Yes";
+                    if (formattedValue == "0" || formattedValue == "0.0" || formattedValue == "0.00") return "No";
+                }
             }
             catch (Exception ex)
             {
@@ -4264,6 +4282,12 @@ namespace scfs_erp.Controllers.Import
                 {
                     if (formattedValue == "1") return "CANCELLED";
                     if (formattedValue == "0") return "INBOOKS";
+                }
+                else if (fieldName.Equals("TRAN_PULSE_STRG_TYPE", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Storage(Calc) dropdown: 0 = Yes, 1 = No (matches form ViewBag.SCALC)
+                    if (formattedValue == "0") return "Yes";
+                    if (formattedValue == "1") return "No";
                 }
             }
             catch (Exception ex)
