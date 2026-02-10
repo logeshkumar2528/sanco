@@ -513,7 +513,9 @@
                                                                      fieldName.Contains("MISMATCH") || fieldName.Contains("NOT SCANNED") ||
                                                                      fieldName.Contains("GPWGHT") || fieldName.Contains("GPEAMT") || 
                                                                      fieldName.Contains("GPSCNMTYPE") || fieldName.Contains("WGHT") || 
-                                                                     fieldName.Contains("AMT");
+                                                                     fieldName.Contains("AMT") ||
+                                                                     fieldName.IndexOf("Handling", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                                     friendlyFieldName.IndexOf("Handling", StringComparison.OrdinalIgnoreCase) >= 0;
                                                 
                                                 // Treat common "empty" values as equivalent (but not "0" for numeric fields)
                                                 oldIsEmpty = string.IsNullOrEmpty(oldVal) || oldVal == "-" || oldVal == "(not set)" || oldVal == "null" || oldVal == "NULL" ||
