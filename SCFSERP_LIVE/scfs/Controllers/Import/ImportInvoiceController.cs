@@ -3953,27 +3953,20 @@ namespace scfs_erp.Controllers.Import
 
                 if (!changed) continue;
 
-                // Get old value - prioritize V0 baseline (has formatted descriptions), then format before object value
+                // Get old value - prefer the actual 'before' value, and fall back to V0 baseline only when needed
                 string os = "";
                 
-                // First, try to get from V0 baseline (this has the formatted display values)
-                if (v0BaselineValues != null && v0BaselineValues.ContainsKey(p.Name) && !string.IsNullOrEmpty(v0BaselineValues[p.Name]))
+                // 1) If we have a concrete 'before' value, use that as OldValue
+                if (ov != null)
+                {
+                    os = FormatValForLoggingDetail(p.Name, ov);
+                }
+                // 2) Otherwise, try to use the V0 baseline (original value when the record was first logged)
+                else if (v0BaselineValues != null && v0BaselineValues.ContainsKey(p.Name) && !string.IsNullOrEmpty(v0BaselineValues[p.Name]))
                 {
                     os = v0BaselineValues[p.Name];
                 }
-                else
-                {
-                    // If no V0 baseline, format the before object value
-                    if (ov != null)
-                    {
-                        os = FormatValForLoggingDetail(p.Name, ov);
-                    }
-                    else
-                    {
-                        // If before object is null and no V0 baseline, use empty string
-                        os = "";
-                    }
-                }
+                // 3) If neither exists, leave OldValue empty
                 
                 var ns = FormatValForLoggingDetail(p.Name, nv);
 
