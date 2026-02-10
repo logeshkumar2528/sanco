@@ -3365,20 +3365,35 @@ namespace scfs_erp.Controllers.Import
         {
             if (Convert.ToInt32(Session["compyid"]) == 0) { return RedirectToAction("Login", "Account"); }
 
+            // Fallback: parse tranmid from Request when it has leading/trailing whitespace (e.g. %09 tab)
+            if (tranmid == null)
+            {
+                int tmp;
+                var qsTran = Request["tranmid"] ?? Request["id"];
+                if (!string.IsNullOrWhiteSpace(qsTran) && int.TryParse(qsTran.Trim().Replace("\t", "").Replace("\n", "").Replace("\r", ""), out tmp))
+                {
+                    tranmid = tmp;
+                }
+            }
+
+            // Normalize version strings (remove whitespace, tabs)
+            versionA = (versionA ?? string.Empty).Trim().Replace("\t", "").Replace("\n", "").Replace("\r", "");
+            versionB = (versionB ?? string.Empty).Trim().Replace("\t", "").Replace("\n", "").Replace("\r", "");
+
             if (tranmid == null || string.IsNullOrWhiteSpace(versionA) || string.IsNullOrWhiteSpace(versionB))
             {
                 TempData["Err"] = "Please provide TRANMID, Version A and Version B to compare.";
                 return RedirectToAction("EditLogInvoice", new { tranmid = tranmid });
             }
 
-            versionA = (versionA ?? string.Empty).Trim();
-            versionB = (versionB ?? string.Empty).Trim();
             string gidnoString = tranmid.HasValue ? tranmid.Value.ToString() : "";
 
             var baseLabel = "v0-" + gidnoString;
-            if (string.Equals(versionA, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionA, "V0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionA, "v0", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(versionA, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionA, "V0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionA, "v0", StringComparison.OrdinalIgnoreCase) ||
+                versionA.StartsWith("V0-", StringComparison.OrdinalIgnoreCase) || versionA.StartsWith("v0-", StringComparison.OrdinalIgnoreCase))
                 versionA = baseLabel;
-            if (string.Equals(versionB, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionB, "V0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionB, "v0", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(versionB, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionB, "V0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionB, "v0", StringComparison.OrdinalIgnoreCase) ||
+                versionB.StartsWith("V0-", StringComparison.OrdinalIgnoreCase) || versionB.StartsWith("v0-", StringComparison.OrdinalIgnoreCase))
                 versionB = baseLabel;
 
             var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
@@ -3387,50 +3402,58 @@ namespace scfs_erp.Controllers.Import
             if (cs != null && !string.IsNullOrWhiteSpace(cs.ConnectionString))
             {
                 using (var sql = new SqlConnection(cs.ConnectionString))
-                using (var cmd = new SqlCommand(@"SELECT [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
-                                                FROM [dbo].[GateInDetailEditLog]
-                                                WHERE [GIDNO]=@GIDNO AND [Modules]='ImportInvoice' AND RTRIM(LTRIM([Version]))=@V", sql))
                 {
-                    cmd.Parameters.Add("@GIDNO", System.Data.SqlDbType.NVarChar, 50);
-                    cmd.Parameters.Add("@V", System.Data.SqlDbType.NVarChar, 100);
-
                     sql.Open();
-                    cmd.Parameters["@GIDNO"].Value = gidnoString;
-                    cmd.Parameters["@V"].Value = versionA.Trim();
-                    using (var r = cmd.ExecuteReader())
+                    // Use case-insensitive version matching (LOWER) to handle V0 vs v0 variations
+                    string queryA = @"SELECT [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
+                        FROM [dbo].[GateInDetailEditLog]
+                        WHERE [GIDNO]=@GIDNO AND [Modules]='ImportInvoice' AND LOWER(RTRIM(LTRIM([Version])))=LOWER(RTRIM(LTRIM(@V)))";
+                    using (var cmd = new SqlCommand(queryA, sql))
                     {
-                        while (r.Read())
+                        cmd.Parameters.AddWithValue("@GIDNO", gidnoString);
+                        cmd.Parameters.AddWithValue("@V", versionA);
+                        using (var r = cmd.ExecuteReader())
                         {
-                            a.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                            while (r.Read())
                             {
-                                GIDNO = gidnoString,
-                                FieldName = Convert.ToString(r["FieldName"]),
-                                OldValue = r["OldValue"] == DBNull.Value ? null : Convert.ToString(r["OldValue"]),
-                                NewValue = r["NewValue"] == DBNull.Value ? null : Convert.ToString(r["NewValue"]),
-                                ChangedBy = Convert.ToString(r["ChangedBy"]),
-                                ChangedOn = r["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r["ChangedOn"]) : DateTime.MinValue,
-                                Version = versionA,
-                                Modules = r["Modules"] == DBNull.Value ? null : Convert.ToString(r["Modules"])
-                            });
+                                a.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                                {
+                                    GIDNO = gidnoString,
+                                    FieldName = Convert.ToString(r["FieldName"]),
+                                    OldValue = r["OldValue"] == DBNull.Value ? null : Convert.ToString(r["OldValue"]),
+                                    NewValue = r["NewValue"] == DBNull.Value ? null : Convert.ToString(r["NewValue"]),
+                                    ChangedBy = Convert.ToString(r["ChangedBy"]),
+                                    ChangedOn = r["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r["ChangedOn"]) : DateTime.MinValue,
+                                    Version = versionA,
+                                    Modules = r["Modules"] == DBNull.Value ? null : Convert.ToString(r["Modules"])
+                                });
+                            }
                         }
                     }
 
-                    cmd.Parameters["@V"].Value = versionB.Trim();
-                    using (var r2 = cmd.ExecuteReader())
+                    string queryB = @"SELECT [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
+                        FROM [dbo].[GateInDetailEditLog]
+                        WHERE [GIDNO]=@GIDNO AND [Modules]='ImportInvoice' AND LOWER(RTRIM(LTRIM([Version])))=LOWER(RTRIM(LTRIM(@V)))";
+                    using (var cmd = new SqlCommand(queryB, sql))
                     {
-                        while (r2.Read())
+                        cmd.Parameters.AddWithValue("@GIDNO", gidnoString);
+                        cmd.Parameters.AddWithValue("@V", versionB);
+                        using (var r2 = cmd.ExecuteReader())
                         {
-                            b.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                            while (r2.Read())
                             {
-                                GIDNO = gidnoString,
-                                FieldName = Convert.ToString(r2["FieldName"]),
-                                OldValue = r2["OldValue"] == DBNull.Value ? null : Convert.ToString(r2["OldValue"]),
-                                NewValue = r2["NewValue"] == DBNull.Value ? null : Convert.ToString(r2["NewValue"]),
-                                ChangedBy = Convert.ToString(r2["ChangedBy"]),
-                                ChangedOn = r2["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r2["ChangedOn"]) : DateTime.MinValue,
-                                Version = versionB,
-                                Modules = r2["Modules"] == DBNull.Value ? null : Convert.ToString(r2["Modules"])
-                            });
+                                b.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                                {
+                                    GIDNO = gidnoString,
+                                    FieldName = Convert.ToString(r2["FieldName"]),
+                                    OldValue = r2["OldValue"] == DBNull.Value ? null : Convert.ToString(r2["OldValue"]),
+                                    NewValue = r2["NewValue"] == DBNull.Value ? null : Convert.ToString(r2["NewValue"]),
+                                    ChangedBy = Convert.ToString(r2["ChangedBy"]),
+                                    ChangedOn = r2["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r2["ChangedOn"]) : DateTime.MinValue,
+                                    Version = versionB,
+                                    Modules = r2["Modules"] == DBNull.Value ? null : Convert.ToString(r2["Modules"])
+                                });
+                            }
                         }
                     }
                 }
@@ -3578,12 +3601,36 @@ namespace scfs_erp.Controllers.Import
                 "Customer Group ID",
                 "Bill Reference No",
                 "Invoice OC1",
+                "Invoice OC2",
                 "Bill Type",
                 "Reference Name",
                 "Storage SGST %",
                 "Storage CGST %",
                 "Transaction Detail No",
-                "Transaction No"
+                "Transaction No",
+                "COVID Discount Amount",
+                "Lorry Memo No",
+                "Lorry Memo ID",
+                "Lorry Slip ID",
+                "Account Head",
+                "Reference Number",
+                "HSN Code",
+                "GST %",
+                "TRAND_STRG_CGST_EXPRN",
+                "TRAND_STRG_IGST_EXPRN",
+                "TRAND_STRG_SGST_EXPRN",
+                "TRAN_COVID_DISC_AMT",
+                "TRANLMID",
+                "TRANLMNO",
+                "TRANLSID",
+                "ACHEADID",
+                "TRANDREFNO",
+                "TRANYTYPE",
+                "Detail.TRAND_STRG_CGST_EXPRN",
+                "Detail.TRAND_STRG_IGST_EXPRN",
+                "Detail.TRAND_STRG_SGST_EXPRN",
+                "Detail.ACHEADID",
+                "Detail.TRANDREFNO"
             };
 
             // Filter out excluded fields from both lists (after friendly name conversion)
