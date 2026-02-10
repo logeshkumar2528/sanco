@@ -534,6 +534,8 @@
                                                 {
                                                     continue; // Skip rows where old and new values are the same
                                                 }
+                                                // Skip rows where old value is empty - user doesn't need "(empty) -> value" entries
+                                                if (oldIsEmpty) { continue; }
                                             }
                                             
                                             <tr>

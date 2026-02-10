@@ -3694,7 +3694,7 @@ namespace scfs_erp.Controllers.Import
                     var d1 = ToNullableDecimal(ov) ?? 0m;
                     var d2 = ToNullableDecimal(nv) ?? 0m;
                     if (d1 == 0m && d2 == 0m) continue;
-                    changed = d1 != d2;
+                    changed = Math.Abs(d1 - d2) >= 0.01m;
                 }
                 else if (type == typeof(double) || type == typeof(float))
                 {
@@ -3747,9 +3747,15 @@ namespace scfs_erp.Controllers.Import
                 var os = FormatValForLogging(p.Name, ov);
                 var ns = FormatValForLogging(p.Name, nv);
                 // Ensure we never store empty OldValue when we have a valid before value
-                if (string.IsNullOrEmpty(os) && ov != null) os = FormatVal(ov);
+                if (string.IsNullOrEmpty(os) && (ov != null || ov == DBNull.Value)) os = FormatVal(ov);
+                os = os ?? "";
+                ns = ns ?? "";
+                // Skip if formatted values are effectively the same (e.g. "13000" vs "13000.00")
+                if (type == typeof(decimal) && decimal.TryParse(os, out var od) && decimal.TryParse(ns, out var nd) && Math.Abs(od - nd) < 0.01m)
+                    continue;
+                if (string.Equals(os.Trim(), ns.Trim(), StringComparison.OrdinalIgnoreCase)) continue;
                 
-                InsertEditLogRowWithDedup(p.Name, os ?? "", ns ?? "");
+                InsertEditLogRowWithDedup(p.Name, os, ns);
             }
             
             // Log TransactionDetail changes
@@ -3905,7 +3911,7 @@ namespace scfs_erp.Controllers.Import
                     var d1 = ToNullableDecimal(ov) ?? 0m;
                     var d2 = ToNullableDecimal(nv) ?? 0m;
                     if (d1 == 0m && d2 == 0m) continue;
-                    changed = d1 != d2;
+                    changed = Math.Abs(d1 - d2) >= 0.01m;
                 }
                 else if (type == typeof(int) || type == typeof(long) || type == typeof(short))
                 {
@@ -3960,7 +3966,7 @@ namespace scfs_erp.Controllers.Import
                 string os = "";
                 
                 // 1) If we have a concrete 'before' value, use that as OldValue
-                if (ov != null)
+                if (ov != null || ov == DBNull.Value)
                 {
                     os = FormatValForLoggingDetail(p.Name, ov);
                     // Ensure we never store empty OldValue when we have a valid before value
@@ -3974,15 +3980,14 @@ namespace scfs_erp.Controllers.Import
                 // 3) If neither exists, leave OldValue empty
                 
                 var ns = FormatValForLoggingDetail(p.Name, nv);
+                os = os ?? "";
+                ns = ns ?? "";
 
                 // Additional validation: Skip if formatted old and new values are effectively the same
-                var osTrimmed = (os ?? "").Trim();
-                var nsTrimmed = (ns ?? "").Trim();
-                if (string.Equals(osTrimmed, nsTrimmed, StringComparison.OrdinalIgnoreCase))
-                {
-                    System.Diagnostics.Debug.WriteLine($"Skipping {p.Name}: Formatted values are identical (os='{osTrimmed}', ns='{nsTrimmed}')");
-                    continue;
-                }
+                var osTrimmed = os.Trim();
+                var nsTrimmed = ns.Trim();
+                if (string.Equals(osTrimmed, nsTrimmed, StringComparison.OrdinalIgnoreCase)) continue;
+                if (type == typeof(decimal) && decimal.TryParse(osTrimmed, out var od) && decimal.TryParse(nsTrimmed, out var nd) && Math.Abs(od - nd) < 0.01m) continue;
 
                 // Debug logging to verify values are being captured
                 System.Diagnostics.Debug.WriteLine($"Logging {p.Name}: OldValue='{os}', NewValue='{ns}', before.ov={ov}, v0BaselineExists={v0BaselineValues != null && v0BaselineValues.ContainsKey(p.Name)}");
@@ -4348,7 +4353,7 @@ namespace scfs_erp.Controllers.Import
 
         private static string FormatVal(object value)
         {
-            if (value == null) return null;
+            if (value == null || value == DBNull.Value) return value == DBNull.Value ? "0" : null;
             if (value is DateTime dt) return dt.ToString("yyyy-MM-dd HH:mm:ss");
             if (value is DateTime?)
             {
@@ -4365,7 +4370,7 @@ namespace scfs_erp.Controllers.Import
 
         private static decimal? ToNullableDecimal(object v)
         {
-            if (v == null) return null;
+            if (v == null || v == DBNull.Value) return null;
             if (v is decimal d) return d;
             var nd = v as decimal?;
             if (nd.HasValue) return nd.Value;

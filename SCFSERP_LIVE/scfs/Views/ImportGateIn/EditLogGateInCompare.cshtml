@@ -858,7 +858,7 @@
                                 <td>
                                     @if (string.IsNullOrEmpty(displayValA))
                                     {
-                                        <span class="empty-value">(not set)</span>
+                                        <span class="empty-value">@(isVersionAV0 ? "Initial" : "(not set)")</span>
                                     }
                                     else
                                     {
@@ -868,7 +868,7 @@
                                 <td>
                                     @if (string.IsNullOrEmpty(displayValB))
                                     {
-                                        <span class="empty-value">(not set)</span>
+                                        <span class="empty-value">@(isVersionBV0 ? "Initial" : "(not set)")</span>
                                     }
                                     else
                                     {
