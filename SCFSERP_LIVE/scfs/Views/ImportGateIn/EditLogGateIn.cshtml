@@ -216,7 +216,8 @@
         // StuffingBill - exclude removed fields
         "TRANLMDATE", "TRANLSDATE", "TRANNARTN", "Narration", "TRANREFBNAME", // StuffingBill - exclude Lorry dates, Narration, and duplicate Bank
         "STRG_SGST_AMT", "STRG_CGST_AMT", "Storage SGST Amount", "Storage CGST Amount", // StuffingBill - exclude Storage SGST and CGST Amount
-        "GTRNSPRTNAME", "Other Transporter Name", "Other Transpoter Name" // Exclude Other Transporter Name field (including typo variant)
+        "GTRNSPRTNAME", "Other Transporter Name", "Other Transpoter Name", // Exclude Other Transporter Name field (including typo variant)
+        "TRANREFNAME", "TRANDREFNAME", "Reference Name", "CHA" // Exclude CHA/Reference Name from edit log
     };
     
     // For ExBondGateIn, ImportLoadSlip, OpenSheet, StuffingBill, and ImportInvoice, don't exclude Status - user wants to see it
