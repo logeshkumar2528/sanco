@@ -841,27 +841,37 @@
                             
                             changedFieldsCount++;
                             var rowClass = diff ? "diff-yes" : "new-field";
+                            // Display Storage(Calc) / TRANDSAMT as Yes/No instead of 1/0
+                            var displayValA = valA;
+                            var displayValB = valB;
+                            if (f != null && (f.Equals("TRANDSAMT", StringComparison.OrdinalIgnoreCase) || friendlyFieldName.Equals("Storage(Calc)", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                if (displayValA == "1" || displayValA == "1.0" || displayValA == "1.00") { displayValA = "Yes"; }
+                                else if (displayValA == "0" || displayValA == "0.0" || displayValA == "0.00") { displayValA = "No"; }
+                                if (displayValB == "1" || displayValB == "1.0" || displayValB == "1.00") { displayValB = "Yes"; }
+                                else if (displayValB == "0" || displayValB == "0.0" || displayValB == "0.00") { displayValB = "No"; }
+                            }
                             
                             <tr class="row-item @rowClass" data-field="@f">
                                 <td class="field-name">@friendlyFieldName</td>
                                 <td>
-                                    @if (string.IsNullOrEmpty(valA))
+                                    @if (string.IsNullOrEmpty(displayValA))
                                     {
                                         <span class="empty-value">(not set)</span>
                                     }
                                     else
                                     {
-                                        <span class="old-badge">@Html.Raw(HttpUtility.HtmlEncode(valA))</span>
+                                        <span class="old-badge">@Html.Raw(HttpUtility.HtmlEncode(displayValA))</span>
                                     }
                                 </td>
                                 <td>
-                                    @if (string.IsNullOrEmpty(valB))
+                                    @if (string.IsNullOrEmpty(displayValB))
                                     {
                                         <span class="empty-value">(not set)</span>
                                     }
                                     else
                                     {
-                                        <span class="new-badge">@Html.Raw(HttpUtility.HtmlEncode(valB))</span>
+                                        <span class="new-badge">@Html.Raw(HttpUtility.HtmlEncode(displayValB))</span>
                                     }
                                 </td>
                             </tr>

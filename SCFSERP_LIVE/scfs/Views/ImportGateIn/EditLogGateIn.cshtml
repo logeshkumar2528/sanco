@@ -566,6 +566,11 @@
                                                             if (displayOldVal == "1") { displayOldVal = "FCL"; }
                                                             else if (displayOldVal == "0") { displayOldVal = "LCL"; }
                                                         }
+                                                        else if (fieldName.Equals("TRANDSAMT", StringComparison.OrdinalIgnoreCase) || friendlyFieldName.Equals("Storage(Calc)", StringComparison.OrdinalIgnoreCase))
+                                                        {
+                                                            if (displayOldVal == "1" || displayOldVal == "1.0" || displayOldVal == "1.00") { displayOldVal = "Yes"; }
+                                                            else if (displayOldVal == "0" || displayOldVal == "0.0" || displayOldVal == "0.00") { displayOldVal = "No"; }
+                                                        }
                                                     }
                                                     @if (oldIsEmpty)
                                                     {
@@ -602,6 +607,11 @@
                                                         {
                                                             if (displayNewVal == "1") { displayNewVal = "FCL"; }
                                                             else if (displayNewVal == "0") { displayNewVal = "LCL"; }
+                                                        }
+                                                        else if (fieldName.Equals("TRANDSAMT", StringComparison.OrdinalIgnoreCase) || friendlyFieldName.Equals("Storage(Calc)", StringComparison.OrdinalIgnoreCase))
+                                                        {
+                                                            if (displayNewVal == "1" || displayNewVal == "1.0" || displayNewVal == "1.00") { displayNewVal = "Yes"; }
+                                                            else if (displayNewVal == "0" || displayNewVal == "0.0" || displayNewVal == "0.00") { displayNewVal = "No"; }
                                                         }
                                                     }
                                                     @if (newIsEmpty)
