@@ -602,10 +602,14 @@
                             if (isVersionAV0)
                             {
                                 // Version A is v0 - check if it has actual field values or just "INITIAL" marker
-                                if (string.IsNullOrEmpty(valA) || valA == "Initial State" || f == "INITIAL")
+                                if (f == "INITIAL" || friendlyFieldName == "INITIAL")
                                 {
-                                    // V0 doesn't have this field (only has "INITIAL" marker)
-                                    // Use Version B's OldValue as the baseline
+                                    // Skip the INITIAL marker field
+                                    continue;
+                                }
+                                else if (string.IsNullOrEmpty(valA) || valA == "Initial State")
+                                {
+                                    // V0 doesn't have this field value - try to get it from V1's OldValue
                                     if (dictB_Old.ContainsKey(f) && !string.IsNullOrEmpty(dictB_Old[f]))
                                     {
                                         valA = dictB_Old[f];
@@ -619,7 +623,7 @@
                                 }
                                 else
                                 {
-                                    // V0 has actual field value - use it
+                                    // V0 has actual field value - use it (this is the key fix - show all V0 values)
                                     valA = va;
                                 }
                             }

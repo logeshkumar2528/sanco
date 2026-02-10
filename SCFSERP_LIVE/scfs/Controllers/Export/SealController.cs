@@ -597,6 +597,8 @@ namespace scfs_erp.Controllers.Export
                                 if (after != null)
                                 {
                                     LogSealEdits(before, after, Session["CUSRID"]?.ToString() ?? "");
+                                    // Log detail field changes (STFDNOP, STFDQTY)
+                                    LogSealDetailEdits(stuffingmaster.STFMID, Session["CUSRID"]?.ToString() ?? "");
                                 }
                             }
                             catch { /* ignore logging errors */ }
@@ -1325,27 +1327,205 @@ namespace scfs_erp.Controllers.Export
 
             try
             {
+                // Check if baseline already exists
                 using (var sql = new SqlConnection(cs.ConnectionString))
+                using (var cmd = new SqlCommand("SELECT COUNT(1) FROM [dbo].[GateInDetailEditLog] WHERE [GIDNO]=@GIDNO AND [Modules]='Seal' AND (RTRIM(LTRIM([Version]))=@VLower OR RTRIM(LTRIM([Version]))=@VUpper OR RTRIM(LTRIM([Version]))='0' OR RTRIM(LTRIM([Version]))='V0')", sql))
                 {
+                    cmd.Parameters.AddWithValue("@GIDNO", gidno);
+                    var baselineVerLower = "v0-" + gidno;
+                    var baselineVerUpper = "V0-" + gidno;
+                    cmd.Parameters.AddWithValue("@VLower", baselineVerLower);
+                    cmd.Parameters.AddWithValue("@VUpper", baselineVerUpper);
                     sql.Open();
-                    using (var cmd = new SqlCommand(@"
-                        IF NOT EXISTS (
-                            SELECT 1 FROM [dbo].[GateInDetailEditLog]
-                            WHERE [GIDNO] = @GIDNO AND [Modules] = 'Seal' AND RTRIM(LTRIM([Version])) = @VERSION
-                        )
-                        BEGIN
-                            INSERT INTO [dbo].[GateInDetailEditLog] ([GIDNO], [FieldName], [OldValue], [NewValue], [ChangedBy], [ChangedOn], [Version], [Modules])
-                            SELECT @GIDNO, 'INITIAL', NULL, 'Initial State', @USER, GETDATE(), @VERSION, 'Seal'
-                        END", sql))
-                    {
-                        cmd.Parameters.AddWithValue("@GIDNO", gidno);
-                        cmd.Parameters.AddWithValue("@VERSION", baselineVer);
-                        cmd.Parameters.AddWithValue("@USER", userId ?? string.Empty);
-                        cmd.ExecuteNonQuery();
-                    }
+                    var exists = Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+                    if (exists) return; // baseline already present
+                }
+
+                InsertBaselineSnapshot(snapshot, userId);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EnsureBaselineVersionZero failed: {ex.Message}");
+            }
+        }
+
+        private void InsertBaselineSnapshot(StuffingMaster snapshot, string userId)
+        {
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (cs == null || string.IsNullOrWhiteSpace(cs.ConnectionString)) return;
+
+            var gidno = snapshot.STFMID.ToString();
+            var baselineVer = "v0-" + gidno;
+
+            var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "STFMID", "COMPYID", "PRCSDATE", "LMUSRID", "CUSRID", "STFTID", "TGID"
+            };
+
+            // Log all master fields
+            var props = typeof(StuffingMaster).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            foreach (var p in props)
+            {
+                if (!p.CanRead) continue;
+                if (p.PropertyType.IsClass && p.PropertyType != typeof(string) && !p.PropertyType.IsValueType) continue;
+                if (exclude.Contains(p.Name)) continue;
+
+                var valObj = p.GetValue(snapshot, null);
+                var newVal = FormatValForLogging(p.Name, valObj);
+                InsertEditLogRow(cs.ConnectionString, gidno, p.Name, null, newVal ?? "", userId, baselineVer, "Seal");
+            }
+
+            // Log detail fields (STFDNOP, STFDQTY) - aggregate all detail records
+            try
+            {
+                var detailRecords = context.stuffingproductdetails.AsNoTracking()
+                    .Where(x => x.STFDID != null && context.stuffingdetails.Any(sd => sd.STFDID == x.STFDID && sd.STFMID == snapshot.STFMID))
+                    .ToList();
+
+                // Aggregate Nop values
+                var nopValues = detailRecords.Where(d => d.STFDNOP.HasValue).Select(d => d.STFDNOP.Value.ToString()).OrderBy(x => x).ToList();
+                if (nopValues.Count > 0)
+                {
+                    InsertEditLogRow(cs.ConnectionString, gidno, "Detail.STFDNOP", null, string.Join(",", nopValues), userId, baselineVer, "Seal");
+                }
+
+                // Aggregate Weight values
+                var qtyValues = detailRecords.Where(d => d.STFDQTY.HasValue).Select(d => d.STFDQTY.Value.ToString()).OrderBy(x => x).ToList();
+                if (qtyValues.Count > 0)
+                {
+                    InsertEditLogRow(cs.ConnectionString, gidno, "Detail.STFDQTY", null, string.Join(",", qtyValues), userId, baselineVer, "Seal");
                 }
             }
-            catch { /* ignore baseline creation errors */ }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to log detail fields for baseline: {ex.Message}");
+            }
+        }
+
+        private void LogSealDetailEdits(int stfmid, string userId)
+        {
+            if (stfmid == 0) return;
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (cs == null || string.IsNullOrWhiteSpace(cs.ConnectionString)) return;
+
+            var gidno = stfmid.ToString();
+            int nextVersion = 1;
+            try
+            {
+                using (var sql = new SqlConnection(cs.ConnectionString))
+                using (var cmd = new SqlCommand(@"
+                    SELECT ISNULL(
+                        MAX(TRY_CAST(
+                            SUBSTRING([Version], 2, 
+                                CASE WHEN CHARINDEX('-', [Version]) > 0 
+                                     THEN CHARINDEX('-', [Version]) - 2 
+                                     ELSE LEN([Version]) - 1
+                                END
+                            ) AS INT)
+                        ), 0) + 1
+                    FROM [dbo].[GateInDetailEditLog]
+                    WHERE [GIDNO] = @GIDNO AND [Modules] = 'Seal'", sql))
+                {
+                    cmd.Parameters.AddWithValue("@GIDNO", gidno);
+                    sql.Open();
+                    var obj = cmd.ExecuteScalar();
+                    if (obj != null && obj != DBNull.Value)
+                        nextVersion = Convert.ToInt32(obj);
+                }
+            }
+            catch { /* ignore logging version errors */ }
+
+            var versionLabel = $"V{nextVersion}-{gidno}";
+
+            try
+            {
+                // Get current detail records after save
+                var currentDetails = context.stuffingproductdetails.AsNoTracking()
+                    .Where(x => x.STFDID != null && context.stuffingdetails.Any(sd => sd.STFDID == x.STFDID && sd.STFMID == stfmid))
+                    .ToList();
+
+                // Get the last logged values from the most recent version (not V0)
+                var lastNopValues = new List<string>();
+                var lastQtyValues = new List<string>();
+
+                try
+                {
+                    using (var sql = new SqlConnection(cs.ConnectionString))
+                    using (var cmd = new SqlCommand(@"
+                        SELECT TOP 100 [NewValue]
+                        FROM [dbo].[GateInDetailEditLog]
+                        WHERE [GIDNO] = @GIDNO AND [Modules] = 'Seal'
+                          AND [FieldName] = 'Detail.STFDNOP'
+                          AND NOT (RTRIM(LTRIM([Version])) IN ('0','V0') OR LEFT(RTRIM(LTRIM([Version])),3) IN ('v0-','V0-'))
+                        ORDER BY [ChangedOn] DESC", sql))
+                    {
+                        cmd.Parameters.AddWithValue("@GIDNO", gidno);
+                        sql.Open();
+                        using (var r = cmd.ExecuteReader())
+                        {
+                            while (r.Read())
+                            {
+                                var val = r["NewValue"] == DBNull.Value ? null : Convert.ToString(r["NewValue"]);
+                                if (!string.IsNullOrEmpty(val)) lastNopValues.Add(val);
+                            }
+                        }
+                    }
+
+                    using (var sql = new SqlConnection(cs.ConnectionString))
+                    using (var cmd = new SqlCommand(@"
+                        SELECT TOP 100 [NewValue]
+                        FROM [dbo].[GateInDetailEditLog]
+                        WHERE [GIDNO] = @GIDNO AND [Modules] = 'Seal'
+                          AND [FieldName] = 'Detail.STFDQTY'
+                          AND NOT (RTRIM(LTRIM([Version])) IN ('0','V0') OR LEFT(RTRIM(LTRIM([Version])),3) IN ('v0-','V0-'))
+                        ORDER BY [ChangedOn] DESC", sql))
+                    {
+                        cmd.Parameters.AddWithValue("@GIDNO", gidno);
+                        sql.Open();
+                        using (var r = cmd.ExecuteReader())
+                        {
+                            while (r.Read())
+                            {
+                                var val = r["NewValue"] == DBNull.Value ? null : Convert.ToString(r["NewValue"]);
+                                if (!string.IsNullOrEmpty(val)) lastQtyValues.Add(val);
+                            }
+                        }
+                    }
+                }
+                catch { /* ignore */ }
+
+                // Get current values (aggregate all detail records)
+                var currentNopValues = currentDetails.Where(d => d.STFDNOP.HasValue).Select(d => d.STFDNOP.Value.ToString()).OrderBy(x => x).ToList();
+                var currentQtyValues = currentDetails.Where(d => d.STFDQTY.HasValue).Select(d => d.STFDQTY.Value.ToString()).OrderBy(x => x).ToList();
+
+                // Compare and log if changed - aggregate values as comma-separated
+                var currentNopStr = string.Join(",", currentNopValues);
+                var currentQtyStr = string.Join(",", currentQtyValues);
+                var lastNopStr = lastNopValues.Count > 0 ? string.Join(",", lastNopValues.Take(Math.Min(lastNopValues.Count, currentNopValues.Count)).OrderBy(x => x)) : "";
+                var lastQtyStr = lastQtyValues.Count > 0 ? string.Join(",", lastQtyValues.Take(Math.Min(lastQtyValues.Count, currentQtyValues.Count)).OrderBy(x => x)) : "";
+
+                // Log Nop if changed or first time
+                if (currentNopStr != lastNopStr || (lastNopValues.Count == 0 && currentNopValues.Count > 0))
+                {
+                    InsertEditLogRow(cs.ConnectionString, gidno, "Detail.STFDNOP", 
+                        string.IsNullOrEmpty(lastNopStr) ? null : lastNopStr, 
+                        string.IsNullOrEmpty(currentNopStr) ? null : currentNopStr, 
+                        userId, versionLabel, "Seal");
+                }
+
+                // Log Weight if changed or first time
+                if (currentQtyStr != lastQtyStr || (lastQtyValues.Count == 0 && currentQtyValues.Count > 0))
+                {
+                    InsertEditLogRow(cs.ConnectionString, gidno, "Detail.STFDQTY", 
+                        string.IsNullOrEmpty(lastQtyStr) ? null : lastQtyStr, 
+                        string.IsNullOrEmpty(currentQtyStr) ? null : currentQtyStr, 
+                        userId, versionLabel, "Seal");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"LogSealDetailEdits failed: {ex.Message}");
+            }
         }
     }
 }
