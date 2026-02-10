@@ -3340,6 +3340,8 @@ namespace scfs_erp.Controllers.Import
                         case "TRANCFID": return "costfactor details";
                         case "TRANEDATE": return "Charge Date";
                         case "TRANDHAMT": return "Handling";
+                        case "TRANDGAMT": return "Handling";
+                        case "DETAIL.TRANDGAMT": return "Handling";
                         case "TRAN_PULSE_STRG_TYPE": return "Storage(Calc)";
                         case "DPAIDNO": return "Duty Paid No";
                         case "CFID": return "Costfactordetails";
@@ -3572,6 +3574,8 @@ namespace scfs_erp.Controllers.Import
                         case "TRANCFID": return "costfactor details";
                         case "TRANEDATE": return "Charge Date";
                         case "TRANDHAMT": return "Handling";
+                        case "TRANDGAMT": return "Handling";
+                        case "DETAIL.TRANDGAMT": return "Handling";
                         case "TRAN_PULSE_STRG_TYPE": return "Storage(Calc)";
                         case "DPAIDNO": return "Duty Paid No";
                         case "CFID": return "Costfactordetails";
