@@ -219,8 +219,8 @@
         "GTRNSPRTNAME", "Other Transporter Name", "Other Transpoter Name" // Exclude Other Transporter Name field (including typo variant)
     };
     
-    // For ExBondGateIn, ImportLoadSlip, OpenSheet, and StuffingBill, don't exclude Status - user wants to see it
-    if (module != "ExBondGateIn" && module != "ImportLoadSlip" && module != "OpenSheet" && module != "StuffingBill")
+    // For ExBondGateIn, ImportLoadSlip, OpenSheet, StuffingBill, and ImportInvoice, don't exclude Status - user wants to see it
+    if (module != "ExBondGateIn" && module != "ImportLoadSlip" && module != "OpenSheet" && module != "StuffingBill" && module != "ImportInvoice")
     {
         excludedFields.Add("Status");
         excludedFields.Add("DISPSTATUS");
