@@ -1178,13 +1178,14 @@ namespace scfs_erp.Controllers.Import
                         trans.Commit();
                         
                         // Ensure V0 baseline exists before logging changes (for both new and existing records)
+                        // Use BEFORE state for baseline so it captures pre-edit values (Charge Date, Handling, etc.)
                         try
                         {
-                            var currentRecord = context.transactionmaster.AsNoTracking().FirstOrDefault(x => x.TRANMID == TRANMID);
-                            if (currentRecord != null)
+                            var recordForBaseline = (before != null) ? before : context.transactionmaster.AsNoTracking().FirstOrDefault(x => x.TRANMID == TRANMID);
+                            if (recordForBaseline != null)
                             {
-                                // Ensure baseline exists (will only create if it doesn't exist)
-                                EnsureBaselineVersionZero(currentRecord, Session["CUSRID"]?.ToString() ?? "");
+                                var detailsForBaseline = (beforeDetails != null) ? beforeDetails : context.transactiondetail.AsNoTracking().Where(x => x.TRANMID == TRANMID).ToList();
+                                EnsureBaselineVersionZero(recordForBaseline, Session["CUSRID"]?.ToString() ?? "", detailsForBaseline);
                             }
                         }
                         catch (Exception ex)
@@ -3745,8 +3746,10 @@ namespace scfs_erp.Controllers.Import
 
                 var os = FormatValForLogging(p.Name, ov);
                 var ns = FormatValForLogging(p.Name, nv);
+                // Ensure we never store empty OldValue when we have a valid before value
+                if (string.IsNullOrEmpty(os) && ov != null) os = FormatVal(ov);
                 
-                InsertEditLogRowWithDedup(p.Name, os, ns);
+                InsertEditLogRowWithDedup(p.Name, os ?? "", ns ?? "");
             }
             
             // Log TransactionDetail changes
@@ -3960,6 +3963,8 @@ namespace scfs_erp.Controllers.Import
                 if (ov != null)
                 {
                     os = FormatValForLoggingDetail(p.Name, ov);
+                    // Ensure we never store empty OldValue when we have a valid before value
+                    if (string.IsNullOrEmpty(os)) os = FormatVal(ov);
                 }
                 // 2) Otherwise, try to use the V0 baseline (original value when the record was first logged)
                 else if (v0BaselineValues != null && v0BaselineValues.ContainsKey(p.Name) && !string.IsNullOrEmpty(v0BaselineValues[p.Name]))
@@ -4444,7 +4449,7 @@ namespace scfs_erp.Controllers.Import
             }
         }
 
-        private void EnsureBaselineVersionZero(TransactionMaster snapshot, string userId)
+        private void EnsureBaselineVersionZero(TransactionMaster snapshot, string userId, List<TransactionDetail> detailRecords = null)
         {
             try
             {
@@ -4467,15 +4472,17 @@ namespace scfs_erp.Controllers.Import
                     if (exists) return;
                 }
 
-                // Load TransactionDetail records for baseline
-                List<TransactionDetail> detailRecords = null;
-                try
+                // Use provided detail records (before state) when available; otherwise load from DB
+                if (detailRecords == null)
                 {
-                    detailRecords = context.transactiondetail.AsNoTracking().Where(x => x.TRANMID == snapshot.TRANMID).ToList();
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Failed to load TransactionDetail for baseline: {ex.Message}");
+                    try
+                    {
+                        detailRecords = context.transactiondetail.AsNoTracking().Where(x => x.TRANMID == snapshot.TRANMID).ToList();
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Failed to load TransactionDetail for baseline: {ex.Message}");
+                    }
                 }
 
                 InsertBaselineSnapshot(snapshot, userId, detailRecords);
@@ -4601,7 +4608,7 @@ namespace scfs_erp.Controllers.Import
             var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 "TRANDID", "TRANMID", "BILLEDID", "SLABTID", "TRANDREFID",
-                "TRANIDATE", "TRANSDATE", "TRANEDATE",
+                "TRANIDATE", "TRANSDATE",
                 "TRANVHLFROM", "TRANVHLTO", "DISPSTATUS", "STFDID", "SBDID", "TRANDAID",
                 "RCOL1", "RCOL2", "RCOL3", "RCOL4", "RCOL5", "RCOL6", "RCOL7",
                 "RAMT1", "RAMT2", "RAMT3", "RAMT4", "RAMT5", "RAMT6", "RAMT7",
