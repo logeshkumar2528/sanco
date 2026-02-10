@@ -4155,6 +4155,56 @@ namespace scfs_erp.Controllers.Import
                     InsertEditLogRow(cs.ConnectionString, gidno, "CFID", oldValue, newValue, userId, versionLabel, "ImportInvoice");
                 }
             }
+            
+            // Log Expression (DEDEXPRN) and Nos (DEDNOS) changes for each cost factor
+            // Match before/after by CFID (order may differ after delete+reinsert)
+            var beforeByCfid = before.GroupBy(x => x.CFID).ToDictionary(g => g.Key, g => g.ToList());
+            foreach (var afterFactor in after)
+            {
+                if (!beforeByCfid.ContainsKey(afterFactor.CFID)) continue; // New factor, already logged via CFID
+                var beforeList = beforeByCfid[afterFactor.CFID];
+                var beforeFactor = beforeList[0]; // Take first match
+                if (beforeList.Count > 1) beforeList.RemoveAt(0); // Consume for duplicate CFID handling
+                
+                string cfDesc = costFactorDict.ContainsKey(afterFactor.CFID) ? costFactorDict[afterFactor.CFID] : afterFactor.CFID.ToString();
+                string fieldPrefix = "Cost Factor - " + cfDesc + " - ";
+                
+                // Expression (DEDEXPRN) change
+                string oldExpr = FormatVal(beforeFactor.DEDEXPRN);
+                string newExpr = FormatVal(afterFactor.DEDEXPRN);
+                if (oldExpr != newExpr)
+                {
+                    InsertEditLogRow(cs.ConnectionString, gidno, fieldPrefix + "Expression", oldExpr, newExpr, userId, versionLabel, "ImportInvoice");
+                }
+                
+                // Nos (DEDNOS) change
+                string oldNos = FormatVal(beforeFactor.DEDNOS);
+                string newNos = FormatVal(afterFactor.DEDNOS);
+                if (oldNos != newNos)
+                {
+                    InsertEditLogRow(cs.ConnectionString, gidno, fieldPrefix + "Nos", oldNos, newNos, userId, versionLabel, "ImportInvoice");
+                }
+                
+                // Values dropdown (DEDTYPE/CFTYPE): 0 = Value, 1 = %
+                int beforeType = beforeFactor.DEDTYPE;
+                int afterType = afterFactor.DEDTYPE;
+                if (beforeType != afterType)
+                {
+                    string oldTypeStr = beforeType == 1 ? "%" : "Value";
+                    string newTypeStr = afterType == 1 ? "%" : "Value";
+                    InsertEditLogRow(cs.ConnectionString, gidno, fieldPrefix + "Values", oldTypeStr, newTypeStr, userId, versionLabel, "ImportInvoice");
+                }
+                
+                // Mode dropdown (DEDMODE): "0" = +, "1" = -
+                string beforeMode = beforeFactor.DEDMODE ?? "0";
+                string afterMode = afterFactor.DEDMODE ?? "0";
+                if (beforeMode != afterMode)
+                {
+                    string oldModeStr = beforeMode == "1" ? "-" : "+";
+                    string newModeStr = afterMode == "1" ? "-" : "+";
+                    InsertEditLogRow(cs.ConnectionString, gidno, fieldPrefix + "Mode", oldModeStr, newModeStr, userId, versionLabel, "ImportInvoice");
+                }
+            }
         }
         
         private string FormatValForLoggingDetail(string fieldName, object value)
