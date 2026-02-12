@@ -397,6 +397,31 @@
                                             // Controller transforms some of them to: Weight, SSR/Escort Amount, Scan Type, etc.
                                             // View maps them to: weighment, SSR/Escort Amount, Scan Type, etc.
                                             // Also include ImportInvoice important fields: TARIFFGID, TARIFFMID
+                                            // Also include DeliveryOrder important fields: Tariff Group, Duty Paid No, Duty Paid Amount, Amount, Validity Date
+                                            var isDeliveryOrderMustShowField = module == "DeliveryOrder" && (
+                                                fieldName.Equals("TARIFFGROUP", StringComparison.OrdinalIgnoreCase) ||
+                                                fieldName.Equals("DPAIDNO", StringComparison.OrdinalIgnoreCase) ||
+                                                fieldName.Equals("DPAIDAMT", StringComparison.OrdinalIgnoreCase) ||
+                                                fieldName.Equals("DOVDATE", StringComparison.OrdinalIgnoreCase) ||
+                                                fieldName.Equals("DOREFAMT", StringComparison.OrdinalIgnoreCase) ||
+                                                // Friendly labels from controller mapping (EditLogDeliveryOrder applies Friendly mapping)
+                                                fieldName.Equals("Tariff Group", StringComparison.OrdinalIgnoreCase) ||
+                                                fieldName.Equals("Duty Paid No", StringComparison.OrdinalIgnoreCase) ||
+                                                fieldName.Equals("Duty Paid Amount", StringComparison.OrdinalIgnoreCase) ||
+                                                fieldName.Equals("Validity Date", StringComparison.OrdinalIgnoreCase) ||
+                                                fieldName.Equals("Amount", StringComparison.OrdinalIgnoreCase) ||
+                                                friendlyFieldName.Equals("Tariff Group", StringComparison.OrdinalIgnoreCase) ||
+                                                friendlyFieldName.Equals("Duty Paid No", StringComparison.OrdinalIgnoreCase) ||
+                                                friendlyFieldName.Equals("Duty Paid Amount", StringComparison.OrdinalIgnoreCase) ||
+                                                friendlyFieldName.Equals("Validity Date", StringComparison.OrdinalIgnoreCase) ||
+                                                friendlyFieldName.Equals("Amount", StringComparison.OrdinalIgnoreCase) ||
+                                                // Fallback contains checks
+                                                fieldName.IndexOf("Duty Paid", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                friendlyFieldName.IndexOf("Duty Paid", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                fieldName.IndexOf("Validity Date", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                friendlyFieldName.IndexOf("Validity Date", StringComparison.OrdinalIgnoreCase) >= 0
+                                            );
+
                                             var isTargetField = fieldName.Equals("GPWGHT", StringComparison.OrdinalIgnoreCase) || 
                                                                  fieldName.Equals("GPEAMT", StringComparison.OrdinalIgnoreCase) || 
                                                                  fieldName.Equals("GPSCNMTYPE", StringComparison.OrdinalIgnoreCase) ||
@@ -444,7 +469,8 @@
                                                                  friendlyFieldName.IndexOf("Refer", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                                                  friendlyFieldName.IndexOf("Plug", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                                                  friendlyFieldName.IndexOf("FCL", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                                                 friendlyFieldName.IndexOf("Tariff", StringComparison.OrdinalIgnoreCase) >= 0;
+                                                                 friendlyFieldName.IndexOf("Tariff", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                                 isDeliveryOrderMustShowField;
 
                                             // Manual Bill detail fields live in TRANSACTIONDETAIL, but we still want them visible in edit log,
                                             // including when a value is set from empty/0 -> something.

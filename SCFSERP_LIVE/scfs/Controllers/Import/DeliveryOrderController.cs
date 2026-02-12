@@ -1,4 +1,4 @@
-﻿using CrystalDecisions.CrystalReports.Engine;
+using CrystalDecisions.CrystalReports.Engine;
 using CrystalDecisions.Shared;
 using scfs_erp.Context;
 using scfs_erp.Helper;
@@ -196,6 +196,34 @@ namespace scfs_erp.Controllers.Import
                             original = context.DeliveryOrderMasters.AsNoTracking().FirstOrDefault(x => x.DOMID == DOMID);
                         }
 
+                        // Capture BEFORE snapshots for related-table fields (these get updated during save)
+                        // This is required because reading "old" values after SaveChanges/UPDATE will return the new values.
+                        BillDutyPaidSnapshot beforeDutyPaid = null;
+                        DateTime? beforeDovDate = null;
+                        if (DOMID != 0)
+                        {
+                            // BILLENTRYMASTER duty-paid fields
+                            try
+                            {
+                                if (F_Form["BILLEMID"] != null && int.TryParse(Convert.ToString(F_Form["BILLEMID"]), out int beforeBillemid) && beforeBillemid > 0)
+                                {
+                                    beforeDutyPaid = GetBillDutyPaidSnapshot(beforeBillemid);
+                                }
+                            }
+                            catch { /* best-effort */ }
+
+                            // DELIVERYORDERDETAIL validity date
+                            try
+                            {
+                                var beforeDetail = context.DeliveryOrderDetails.AsNoTracking().FirstOrDefault(x => x.DOMID == DOMID);
+                                if (beforeDetail != null)
+                                {
+                                    beforeDovDate = beforeDetail.DOVDATE;
+                                }
+                            }
+                            catch { /* best-effort */ }
+                        }
+
                         if (DOMID != 0)
                         {
                             DeliveryOrderMaster = context.DeliveryOrderMasters.Find(DOMID);
@@ -374,7 +402,7 @@ namespace scfs_erp.Controllers.Import
                                         LogDeliveryOrderEdits(original, savedRecord, Session["CUSRID"] != null ? Session["CUSRID"].ToString() : "");
                                         
                                         // Log additional fields from related tables
-                                        LogAdditionalDeliveryOrderFields(DOMID, F_Form, Session["CUSRID"] != null ? Session["CUSRID"].ToString() : "");
+                                        LogAdditionalDeliveryOrderFields(DOMID, original, beforeDutyPaid, beforeDovDate, F_Form, Session["CUSRID"] != null ? Session["CUSRID"].ToString() : "");
                                         
                                         System.Diagnostics.Debug.WriteLine($"LogDeliveryOrderEdits completed successfully");
                                     }
@@ -476,6 +504,36 @@ namespace scfs_erp.Controllers.Import
         }//..End of delete
 
         #region Edit Log Methods
+        // Lightweight DTO for reading only duty-paid fields without requiring full BillEntryMaster mapping
+        private sealed class BillDutyPaidSnapshot
+        {
+            public string DPAIDNO { get; set; }
+            public decimal? DPAIDAMT { get; set; }
+        }
+
+        private DeliveryOrderMaster FindDeliveryOrderByDomidOrDono(int id)
+        {
+            // Some callers pass DOMID, some pass DONO. Support both.
+            var rec = context.DeliveryOrderMasters.AsNoTracking().FirstOrDefault(x => x.DOMID == id);
+            if (rec != null) return rec;
+            return context.DeliveryOrderMasters.AsNoTracking().FirstOrDefault(x => x.DONO == id);
+        }
+
+        private BillDutyPaidSnapshot GetBillDutyPaidSnapshot(int billemid)
+        {
+            try
+            {
+                return context.Database
+                    .SqlQuery<BillDutyPaidSnapshot>("SELECT DPAIDNO, DPAIDAMT FROM BILLENTRYMASTER WHERE BILLEMID = @p0", billemid)
+                    .FirstOrDefault();
+            }
+            catch
+            {
+                // Best effort; do not fail the save/log if snapshot read fails
+                return null;
+            }
+        }
+
         public ActionResult EditLogDeliveryOrder(int? domid, DateTime? from = null, DateTime? to = null, string user = null, string fieldName = null, string version = null)
         {
             if (Convert.ToInt32(Session["compyid"]) == 0) { return RedirectToAction("Login", "Account"); }
@@ -493,8 +551,8 @@ namespace scfs_erp.Controllers.Import
                     
                     if (domid.HasValue)
                     {
-                        // Find DONO from DOMID
-                        var deliveryOrderRecord = context.DeliveryOrderMasters.AsNoTracking().FirstOrDefault(x => x.DOMID == domid.Value);
+                        // Accept either DOMID or DONO in domid parameter
+                        var deliveryOrderRecord = FindDeliveryOrderByDomidOrDono(domid.Value);
                         if (deliveryOrderRecord != null && deliveryOrderRecord.DONO > 0)
                         {
                             query += " AND [GIDNO] = @DONO";
@@ -523,7 +581,7 @@ namespace scfs_erp.Controllers.Import
                     {
                         if (domid.HasValue)
                         {
-                            var deliveryOrderRecord = context.DeliveryOrderMasters.AsNoTracking().FirstOrDefault(x => x.DOMID == domid.Value);
+                            var deliveryOrderRecord = FindDeliveryOrderByDomidOrDono(domid.Value);
                             if (deliveryOrderRecord != null && deliveryOrderRecord.DONO > 0)
                             {
                                 cmd.Parameters.AddWithValue("@DONO", deliveryOrderRecord.DONO.ToString());
@@ -645,7 +703,7 @@ namespace scfs_erp.Controllers.Import
             string gidnoString = "";
             if (domid.HasValue)
             {
-                var deliveryOrderRecord = context.DeliveryOrderMasters.AsNoTracking().FirstOrDefault(x => x.DOMID == domid.Value);
+                var deliveryOrderRecord = FindDeliveryOrderByDomidOrDono(domid.Value);
                 if (deliveryOrderRecord != null && deliveryOrderRecord.DONO > 0)
                 {
                     gidnoString = deliveryOrderRecord.DONO.ToString();
@@ -1241,7 +1299,7 @@ namespace scfs_erp.Controllers.Import
             }
         }
 
-        private void LogAdditionalDeliveryOrderFields(int domid, FormCollection form, string userId)
+        private void LogAdditionalDeliveryOrderFields(int domid, DeliveryOrderMaster beforeMaster, BillDutyPaidSnapshot beforeDutyPaid, DateTime? beforeDovDate, FormCollection form, string userId)
         {
             try
             {
@@ -1286,7 +1344,7 @@ namespace scfs_erp.Controllers.Import
                 // 1. Log Tariff Group changes (derived from TARIFFMID)
                 if (form["TARIFFMID"] != null && int.TryParse(form["TARIFFMID"], out int newTariffMid))
                 {
-                    var oldTariffMid = doRecord.TARIFFMID;
+                    var oldTariffMid = beforeMaster != null ? beforeMaster.TARIFFMID : doRecord.TARIFFMID;
                     if (oldTariffMid != newTariffMid)
                     {
                         string oldTariffGroup = "";
@@ -1320,41 +1378,33 @@ namespace scfs_erp.Controllers.Import
                 }
 
                 // 2. Log Duty Paid No and Amount (from BILLENTRYMASTER)
-                if (form["BILLEMID"] != null && int.TryParse(form["BILLEMID"], out int billemid) && billemid > 0)
+                if (form["BILLEMID"] != null && int.TryParse(form["BILLEMID"], out int billemid) && billemid > 0 && beforeDutyPaid != null)
                 {
-                    // Get old values from database
-                    var oldBillEntry = context.Database.SqlQuery<BillEntryMaster>(
-                        "SELECT DPAIDNO, DPAIDAMT FROM BILLENTRYMASTER WHERE BILLEMID = @p0", billemid).FirstOrDefault();
+                    string oldDpaidNo = beforeDutyPaid.DPAIDNO?.ToString() ?? "";
+                    decimal oldDpaidAmt = beforeDutyPaid.DPAIDAMT ?? 0m;
 
-                    if (oldBillEntry != null)
+                    string newDpaidNo = form["F_DPAIDNO"]?.ToString() ?? "";
+                    decimal newDpaidAmt = 0m;
+                    if (form["F_DPAIDAMT"] != null)
+                        decimal.TryParse(form["F_DPAIDAMT"], out newDpaidAmt);
+
+                    if (oldDpaidNo != newDpaidNo)
                     {
-                        string oldDpaidNo = oldBillEntry.DPAIDNO?.ToString() ?? "";
-                        decimal oldDpaidAmt = oldBillEntry.DPAIDAMT;
+                        InsertEditLogRow(cs.ConnectionString, gidno, "DPAIDNO", oldDpaidNo, newDpaidNo, userId, versionLabel, "DeliveryOrder");
+                    }
 
-                        string newDpaidNo = form["F_DPAIDNO"]?.ToString() ?? "";
-                        decimal newDpaidAmt = 0m;
-                        if (form["F_DPAIDAMT"] != null)
-                            decimal.TryParse(form["F_DPAIDAMT"], out newDpaidAmt);
-
-                        if (oldDpaidNo != newDpaidNo)
-                        {
-                            InsertEditLogRow(cs.ConnectionString, gidno, "DPAIDNO", oldDpaidNo, newDpaidNo, userId, versionLabel, "DeliveryOrder");
-                        }
-
-                        if (oldDpaidAmt != newDpaidAmt)
-                        {
-                            InsertEditLogRow(cs.ConnectionString, gidno, "DPAIDAMT", oldDpaidAmt.ToString("0.00"), newDpaidAmt.ToString("0.00"), userId, versionLabel, "DeliveryOrder");
-                        }
+                    if (oldDpaidAmt != newDpaidAmt)
+                    {
+                        InsertEditLogRow(cs.ConnectionString, gidno, "DPAIDAMT", oldDpaidAmt.ToString("0.00"), newDpaidAmt.ToString("0.00"), userId, versionLabel, "DeliveryOrder");
                     }
                 }
 
                 // 3. Log Validity Date (from DELIVERYORDERDETAIL)
                 if (form["detaildata[0].DOVDATE"] != null && DateTime.TryParse(form["detaildata[0].DOVDATE"], out DateTime newValDate))
                 {
-                    var oldDetail = context.DeliveryOrderDetails.AsNoTracking().FirstOrDefault(x => x.DOMID == domid);
-                    if (oldDetail != null)
+                    if (beforeDovDate.HasValue)
                     {
-                        var oldValDate = oldDetail.DOVDATE;
+                        var oldValDate = beforeDovDate.Value;
                         if (oldValDate.Date != newValDate.Date)
                         {
                             InsertEditLogRow(cs.ConnectionString, gidno, "DOVDATE", 
