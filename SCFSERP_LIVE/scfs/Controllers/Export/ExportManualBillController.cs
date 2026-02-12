@@ -961,9 +961,12 @@ namespace scfs_erp.Controllers.Export
 
                         // Capture BEFORE state for edit logging
                         TransactionMaster original = null;
+                        List<TransactionDetail> originalDetails = new List<TransactionDetail>();
                         if (TRANMID != 0)
                         {
                             original = context.transactionmaster.AsNoTracking().FirstOrDefault(x => x.TRANMID == TRANMID);
+                            // Detail fields (Account Head / Bill Description / HSN Code) live in TransactionDetail
+                            originalDetails = context.transactiondetail.AsNoTracking().Where(x => x.TRANMID == TRANMID).ToList();
                         }
 
                         if (TRANMID != 0)
@@ -1312,19 +1315,39 @@ namespace scfs_erp.Controllers.Export
                                 
                                 // Ensure baseline snapshot (Version = "0") exists for this record before logging diffs
                                 EnsureBaselineVersionZero(original, Session["CUSRID"] != null ? Session["CUSRID"].ToString() : "");
-                                
-                                // Reload the saved record to get the final state (after transaction commit)
-                                using (var logContext = new SCFSERPContext())
+
+                                var editLogCs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+                                if (editLogCs == null || string.IsNullOrWhiteSpace(editLogCs.ConnectionString))
                                 {
-                                    var savedRecord = logContext.transactionmaster.AsNoTracking().FirstOrDefault(x => x.TRANMID == TRANMID);
-                                    if (savedRecord != null)
+                                    System.Diagnostics.Debug.WriteLine("Edit logging skipped: SCFSERP_EditLog connection string not found");
+                                }
+                                else
+                                {
+                                    var gidno = TRANMID.ToString();
+                                    var nextVersion = GetNextEditLogVersion(editLogCs.ConnectionString, gidno, "ExportManualBill");
+                                    var versionLabel = $"V{nextVersion}-{gidno}";
+
+                                    // Reload the saved record + details to get the final state (after transaction commit)
+                                    using (var logContext = new SCFSERPContext())
                                     {
-                                        LogTransactionEdits(original, savedRecord, Session["CUSRID"] != null ? Session["CUSRID"].ToString() : "");
-                                        System.Diagnostics.Debug.WriteLine($"LogTransactionEdits completed successfully");
-                                    }
-                                    else
-                                    {
-                                        System.Diagnostics.Debug.WriteLine($"SAVED RECORD NOT FOUND after commit for TRANMID={transactionmaster.TRANMID}");
+                                        var savedRecord = logContext.transactionmaster.AsNoTracking().FirstOrDefault(x => x.TRANMID == TRANMID);
+                                        var savedDetails = logContext.transactiondetail.AsNoTracking().Where(x => x.TRANMID == TRANMID).ToList();
+
+                                        if (savedRecord != null)
+                                        {
+                                            var userId = Session["CUSRID"] != null ? Session["CUSRID"].ToString() : "";
+
+                                            // Log master changes using the shared version label
+                                            LogTransactionEditsWithVersion(original, savedRecord, userId, versionLabel, editLogCs.ConnectionString);
+                                            // Log detail changes (Account Head / Bill Description / HSN Code)
+                                            LogTransactionDetailEdits(originalDetails, savedDetails, userId, versionLabel, editLogCs.ConnectionString, gidno);
+
+                                            System.Diagnostics.Debug.WriteLine($"Edit log completed successfully (Version={versionLabel})");
+                                        }
+                                        else
+                                        {
+                                            System.Diagnostics.Debug.WriteLine($"SAVED RECORD NOT FOUND after commit for TRANMID={transactionmaster.TRANMID}");
+                                        }
                                     }
                                 }
                             }
@@ -2241,6 +2264,230 @@ namespace scfs_erp.Controllers.Export
             }
             
             System.Diagnostics.Debug.WriteLine($"LogTransactionEdits completed. Total fields processed, changes logged for GIDNO={gidno}");
+        }
+
+        private void LogTransactionEditsWithVersion(TransactionMaster before, TransactionMaster after, string userId, string versionLabel, string editLogConnectionString)
+        {
+            if (before == null || after == null) return;
+            if (string.IsNullOrWhiteSpace(editLogConnectionString)) return;
+
+            // Exclude system or noisy fields
+            var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "TRANMID", "COMPYID", "SDPTID", "PRCSDATE", "LMUSRID", "CUSRID",
+                "TRANTID", "TRANPCOUNT", "TRANCSNAME", "LEMID", "TRANAHAMT",
+                "TRANHBLNO", "TRANPONO",
+                "SLABNARN_HANDLDESC", "SLABNARN_ADNLDESC", "SLABNARN_STS",
+                "TALLYSTAT", "IRNNO", "ACKNO", "ACKDT", "QRCODEPATH",
+                "TRANGSTNO", "TRANPAMT",
+                // Removed fields - no longer displayed
+                "TRANREFID", "TRANREFBNAME", "TRANAMTWRDS", "TRANLMDATE", "TRANLSDATE",
+                "HANDL_SGST_AMT", "HANDL_CGST_AMT", "HANDL_IGST_AMT", "HANDL_SGST_EXPRN", "HANDL_CGST_EXPRN", "HANDL_IGST_EXPRN",
+                "STRG_CGST_AMT", "STRG_SGST_AMT", "STRG_IGST_AMT", "STRG_SGST_EXPRN", "STRG_CGST_EXPRN", "STRG_IGST_EXPRN",
+                "HANDL_TAXABLE_AMT", "STRG_TAXABLE_AMT", "HANDL_HSNCODE", "STRG_HSNCODE",
+                "TRANTALLYCHAID"  // Tally CHA ID - exclude, only show TRANTALLYCHANAME
+            };
+
+            var gidno = after.TRANMID.ToString();
+            var props = typeof(TransactionMaster).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            foreach (var p in props)
+            {
+                if (!p.CanRead) continue;
+                if (p.PropertyType.IsClass && p.PropertyType != typeof(string) && !p.PropertyType.IsValueType)
+                    continue;
+                if (exclude.Contains(p.Name)) continue;
+
+                var ov = p.GetValue(before, null);
+                var nv = p.GetValue(after, null);
+
+                if (BothNull(ov, nv)) continue;
+
+                var type = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+                bool changed;
+
+                if (type == typeof(decimal))
+                {
+                    var d1 = ToNullableDecimal(ov) ?? 0m;
+                    var d2 = ToNullableDecimal(nv) ?? 0m;
+                    if (d1 == 0m && d2 == 0m) continue;
+                    changed = d1 != d2;
+                }
+                else if (type == typeof(double) || type == typeof(float))
+                {
+                    var d1 = Convert.ToDouble(ov ?? 0.0);
+                    var d2 = Convert.ToDouble(nv ?? 0.0);
+                    if (Math.Abs(d1) < 1e-9 && Math.Abs(d2) < 1e-9) continue;
+                    changed = Math.Abs(d1 - d2) > 1e-9;
+                }
+                else if (type == typeof(int) || type == typeof(long) || type == typeof(short))
+                {
+                    var i1 = Convert.ToInt64(ov ?? 0);
+                    var i2 = Convert.ToInt64(nv ?? 0);
+                    if (i1 == 0 && i2 == 0) continue;
+                    changed = i1 != i2;
+                }
+                else if (type == typeof(DateTime))
+                {
+                    var t1 = (ov as DateTime?) ?? default(DateTime);
+                    var t2 = (nv as DateTime?) ?? default(DateTime);
+
+                    if (t1 == default(DateTime) && t2 == default(DateTime)) continue;
+
+                    if (p.Name.Contains("DATE") && !p.Name.Contains("TIME"))
+                    {
+                        changed = t1.Date != t2.Date;
+                    }
+                    else
+                    {
+                        t1 = new DateTime(t1.Year, t1.Month, t1.Day, t1.Hour, t1.Minute, t1.Second);
+                        t2 = new DateTime(t2.Year, t2.Month, t2.Day, t2.Hour, t2.Minute, t2.Second);
+                        changed = t1 != t2;
+                    }
+                }
+                else if (type == typeof(string))
+                {
+                    var s1 = (Convert.ToString(ov) ?? string.Empty).Trim();
+                    var s2 = (Convert.ToString(nv) ?? string.Empty).Trim();
+                    bool def1 = string.IsNullOrEmpty(s1) || s1 == "-" || s1 == "0" || s1 == "0.0" || s1 == "0.00" || s1 == "0.000" || s1 == "0.0000";
+                    bool def2 = string.IsNullOrEmpty(s2) || s2 == "-" || s2 == "0" || s2 == "0.0" || s2 == "0.00" || s2 == "0.000" || s2 == "0.0000";
+                    if (def1 && def2) continue;
+                    changed = !string.Equals(s1, s2, StringComparison.Ordinal);
+                }
+                else
+                {
+                    var s1 = FormatVal(ov);
+                    var s2 = FormatVal(nv);
+                    changed = !string.Equals(s1, s2, StringComparison.Ordinal);
+                }
+
+                if (!changed) continue;
+
+                var os = FormatValForLogging(p.Name, ov);
+                var ns = FormatValForLogging(p.Name, nv);
+
+                InsertEditLogRow(editLogConnectionString, gidno, p.Name, os, ns, userId, versionLabel, "ExportManualBill");
+            }
+        }
+
+        private void LogTransactionDetailEdits(IEnumerable<TransactionDetail> beforeDetails, IEnumerable<TransactionDetail> afterDetails, string userId, string versionLabel, string editLogConnectionString, string gidno)
+        {
+            if (string.IsNullOrWhiteSpace(editLogConnectionString)) return;
+            beforeDetails = beforeDetails ?? new List<TransactionDetail>();
+            afterDetails = afterDetails ?? new List<TransactionDetail>();
+
+            Dictionary<int, string> dictAccountHead = null;
+            try
+            {
+                dictAccountHead = context.accountheadmasters.ToDictionary(x => x.ACHEADID, x => x.ACHEADDESC);
+            }
+            catch { /* best-effort */ }
+
+            Func<TransactionDetail, string> accountHeadSelector = d =>
+            {
+                var id = d.ACHEADID;
+                if (dictAccountHead != null && dictAccountHead.ContainsKey(id))
+                {
+                    var name = dictAccountHead[id];
+                    if (!string.IsNullOrWhiteSpace(name))
+                        return $"{id} - {name}";
+                }
+                return id.ToString();
+            };
+
+            string oldAccountHead, newAccountHead;
+            BuildDetailDiffSnapshot(beforeDetails, afterDetails, accountHeadSelector, out oldAccountHead, out newAccountHead);
+
+            string oldBillDesc, newBillDesc;
+            BuildDetailDiffSnapshot(beforeDetails, afterDetails, d => d.TRANDDESC, out oldBillDesc, out newBillDesc);
+
+            string oldHsn, newHsn;
+            BuildDetailDiffSnapshot(beforeDetails, afterDetails, d => d.TRANDREFNO, out oldHsn, out newHsn); // HSN Code stored in TRANDREFNO
+
+            if (!string.IsNullOrWhiteSpace(oldAccountHead) || !string.IsNullOrWhiteSpace(newAccountHead))
+                InsertEditLogRow(editLogConnectionString, gidno, "Detail.ACHEADID", oldAccountHead, newAccountHead, userId, versionLabel, "ExportManualBill");
+            if (!string.IsNullOrWhiteSpace(oldBillDesc) || !string.IsNullOrWhiteSpace(newBillDesc))
+                InsertEditLogRow(editLogConnectionString, gidno, "Detail.TRANDDESC", oldBillDesc, newBillDesc, userId, versionLabel, "ExportManualBill");
+            if (!string.IsNullOrWhiteSpace(oldHsn) || !string.IsNullOrWhiteSpace(newHsn))
+                InsertEditLogRow(editLogConnectionString, gidno, "Detail.TRANDREFNO", oldHsn, newHsn, userId, versionLabel, "ExportManualBill");
+        }
+
+        private static void BuildDetailDiffSnapshot(IEnumerable<TransactionDetail> beforeDetails, IEnumerable<TransactionDetail> afterDetails, Func<TransactionDetail, string> selector, out string oldSnapshot, out string newSnapshot)
+        {
+            beforeDetails = beforeDetails ?? new List<TransactionDetail>();
+            afterDetails = afterDetails ?? new List<TransactionDetail>();
+            selector = selector ?? (d => string.Empty);
+
+            var beforeById = beforeDetails
+                .Where(x => x != null)
+                .GroupBy(x => x.TRANDID)
+                .ToDictionary(g => g.Key, g => g.First());
+            var afterById = afterDetails
+                .Where(x => x != null)
+                .GroupBy(x => x.TRANDID)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var ids = beforeById.Keys.Union(afterById.Keys).OrderBy(x => x).ToList();
+            var oldLines = new List<string>();
+            var newLines = new List<string>();
+            int rowNo = 0;
+
+            foreach (var id in ids)
+            {
+                TransactionDetail b = null;
+                TransactionDetail a = null;
+                beforeById.TryGetValue(id, out b);
+                afterById.TryGetValue(id, out a);
+
+                var ov = (b != null ? selector(b) : string.Empty) ?? string.Empty;
+                var nv = (a != null ? selector(a) : string.Empty) ?? string.Empty;
+                ov = ov.Trim();
+                nv = nv.Trim();
+
+                if (string.Equals(ov, nv, StringComparison.Ordinal))
+                    continue;
+
+                rowNo++;
+                oldLines.Add($"Row{rowNo}(TRANDID={id}): {ov}");
+                newLines.Add($"Row{rowNo}(TRANDID={id}): {nv}");
+            }
+
+            oldSnapshot = string.Join(Environment.NewLine, oldLines);
+            newSnapshot = string.Join(Environment.NewLine, newLines);
+        }
+
+        private static int GetNextEditLogVersion(string connectionString, string gidno, string module)
+        {
+            int nextVersion = 1;
+            if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(gidno) || string.IsNullOrWhiteSpace(module))
+                return nextVersion;
+
+            try
+            {
+                using (var sql = new SqlConnection(connectionString))
+                using (var cmd = new SqlCommand(@"
+                    SELECT ISNULL(
+                        MAX(TRY_CAST(
+                            SUBSTRING([Version], 2,
+                                CASE WHEN CHARINDEX('-', [Version]) > 0
+                                     THEN CHARINDEX('-', [Version]) - 2
+                                     ELSE LEN([Version]) - 1
+                                END
+                            ) AS INT)
+                        ), 0) + 1
+                    FROM [dbo].[GateInDetailEditLog]
+                    WHERE [GIDNO] = @GIDNO AND [Modules] = @Modules", sql))
+                {
+                    cmd.Parameters.AddWithValue("@GIDNO", gidno);
+                    cmd.Parameters.AddWithValue("@Modules", module);
+                    sql.Open();
+                    var obj = cmd.ExecuteScalar();
+                    if (obj != null && obj != DBNull.Value)
+                        nextVersion = Convert.ToInt32(obj);
+                }
+            }
+            catch { /* ignore logging version errors */ }
+
+            return nextVersion;
         }
 
         private string FormatValForLogging(string fieldName, object value)
