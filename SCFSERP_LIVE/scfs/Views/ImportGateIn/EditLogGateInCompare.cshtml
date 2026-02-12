@@ -849,6 +849,10 @@
                             
                             // Skip Import Manual Bill removed fields
                             if (module == "ImportManualBill" && f != null && (
+                                f.Equals("REGSTRID", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Tax Type", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("TRANMODEDETL", StringComparison.OrdinalIgnoreCase) ||
+                                f.Equals("Mode Detail", StringComparison.OrdinalIgnoreCase) ||
                                 f.Equals("TRANREFID", StringComparison.OrdinalIgnoreCase) ||
                                 f.Equals("TRANREFBNAME", StringComparison.OrdinalIgnoreCase) ||
                                 f.Equals("TRANAMTWRDS", StringComparison.OrdinalIgnoreCase) ||
