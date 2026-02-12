@@ -625,6 +625,31 @@
                             
                             var friendlyFieldName = (getFriendlyName(fieldName) ?? string.Empty).Trim();
                             var isV0ComparisonNow = isVersionAV0 || isVersionBV0;
+
+                            // DeliveryOrder: hide unwanted header fields in compare view
+                            // (User requirement: do not show these in DeliveryOrder compare)
+                            if (module == "DeliveryOrder")
+                            {
+                                var isUnwanted =
+                                    fieldName.Equals("CHA ID", StringComparison.OrdinalIgnoreCase) ||
+                                    friendlyFieldName.Equals("CHA ID", StringComparison.OrdinalIgnoreCase) ||
+                                    fieldName.Equals("Date", StringComparison.OrdinalIgnoreCase) ||
+                                    friendlyFieldName.Equals("Date", StringComparison.OrdinalIgnoreCase) ||
+                                    fieldName.Equals("DO Document No", StringComparison.OrdinalIgnoreCase) ||
+                                    friendlyFieldName.Equals("DO Document No", StringComparison.OrdinalIgnoreCase) ||
+                                    fieldName.Equals("Payment Mode Detail", StringComparison.OrdinalIgnoreCase) ||
+                                    friendlyFieldName.Equals("Payment Mode Detail", StringComparison.OrdinalIgnoreCase) ||
+                                    // Safety: exclude if raw DB keys appear (in case mapping changes)
+                                    fieldName.Equals("DOREFID", StringComparison.OrdinalIgnoreCase) ||
+                                    fieldName.Equals("DODATE", StringComparison.OrdinalIgnoreCase) ||
+                                    fieldName.Equals("DODNO", StringComparison.OrdinalIgnoreCase) ||
+                                    fieldName.Equals("DOMODEDETL", StringComparison.OrdinalIgnoreCase);
+
+                                if (isUnwanted)
+                                {
+                                    continue;
+                                }
+                            }
                             
                             // ExportManualBill: robust removal for fields that can appear with spaces/underscores or extra whitespace
                             // (ex: HANDL_IGST_AMT vs "HANDL IGST AMT", "Mode Detail " etc.)
