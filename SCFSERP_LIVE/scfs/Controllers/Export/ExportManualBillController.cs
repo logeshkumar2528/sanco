@@ -1717,6 +1717,14 @@ namespace scfs_erp.Controllers.Export
                 list = list.Where(row => {
                     if (row.FieldName == null) return true;
                     var rowFieldName = row.FieldName.Trim();
+                    // Normalize field name (some logs store spaces instead of underscores)
+                    // Example: HANDL_IGST_AMT vs HANDL IGST AMT
+                    var normalized = new string(rowFieldName.Where(c => c != '_' && !char.IsWhiteSpace(c)).ToArray());
+                    if (normalized.Equals("HANDLIGSTAMT", StringComparison.OrdinalIgnoreCase) ||
+                        normalized.Equals("HANDLIGSTEXPRN", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
                     // Skip removed fields
                     if (rowFieldName.Equals("TRANREFID", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldName.Equals("TRANREFBNAME", StringComparison.OrdinalIgnoreCase) ||
@@ -1933,6 +1941,14 @@ namespace scfs_erp.Controllers.Export
                 a = a.Where(row => {
                     if (row.FieldName == null) return true;
                     var rowFieldNameA = row.FieldName.Trim();
+                    // Normalize field name (some logs store spaces instead of underscores)
+                    // Example: HANDL_IGST_AMT vs HANDL IGST AMT
+                    var normalizedA = new string(rowFieldNameA.Where(c => c != '_' && !char.IsWhiteSpace(c)).ToArray());
+                    if (normalizedA.Equals("HANDLIGSTAMT", StringComparison.OrdinalIgnoreCase) ||
+                        normalizedA.Equals("HANDLIGSTEXPRN", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
                     // Skip removed fields
                     if (rowFieldNameA.Equals("TRANREFID", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameA.Equals("TRANREFBNAME", StringComparison.OrdinalIgnoreCase) ||
@@ -1981,6 +1997,14 @@ namespace scfs_erp.Controllers.Export
                 b = b.Where(row => {
                     if (row.FieldName == null) return true;
                     var rowFieldNameB = row.FieldName.Trim();
+                    // Normalize field name (some logs store spaces instead of underscores)
+                    // Example: HANDL_IGST_AMT vs HANDL IGST AMT
+                    var normalizedB = new string(rowFieldNameB.Where(c => c != '_' && !char.IsWhiteSpace(c)).ToArray());
+                    if (normalizedB.Equals("HANDLIGSTAMT", StringComparison.OrdinalIgnoreCase) ||
+                        normalizedB.Equals("HANDLIGSTEXPRN", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
                     // Skip removed fields
                     if (rowFieldNameB.Equals("TRANREFID", StringComparison.OrdinalIgnoreCase) ||
                         rowFieldNameB.Equals("TRANREFBNAME", StringComparison.OrdinalIgnoreCase) ||

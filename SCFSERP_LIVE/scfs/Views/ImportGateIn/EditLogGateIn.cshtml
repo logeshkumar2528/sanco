@@ -209,6 +209,7 @@
         "TRANLMDATE", "Lorry Memo Date", // ExportManualBill - exclude Lorry Memo Date
         "TRANLSDATE", "Lorry Slip Date", // ExportManualBill - exclude Lorry Slip Date
         "HANDL_SGST_AMT", "HANDL_CGST_AMT", "HANDL_SGST_EXPRN", "HANDL_CGST_EXPRN", "HANDL_IGST_EXPRN", "HANDL_IGST_AMT", // ExportManualBill - exclude Handling GST fields
+        "HANDL IGST AMT", "HANDL IGST EXPRN", // Some logs store spaces instead of underscores
         "STRG_IGST_AMT", "STRG_IGST_EXPRN", // ExportManualBill - exclude Storage IGST fields
         "HANDL_TAXABLE_AMT", "STRG_TAXABLE_AMT", "HANDL_HSNCODE", "STRG_HSNCODE", // ExportManualBill - exclude Taxable Amount and HSN Code
         "Handling SGST Amount", "Handling CGST Amount", "Handling SGST %", "Handling CGST %", "Handling IGST %", "Handling IGST Amount", // ExportManualBill - exclude friendly names
@@ -569,7 +570,26 @@
                                                     continue; // Skip rows where old and new values are the same
                                                 }
                                                 // Skip rows where old value is empty - user doesn't need "(empty) -> value" entries
-                                                if (oldIsEmpty) { continue; }
+                                                // EXCEPTION: For some key dropdown fields in Export Manual Bill, we DO want to see 0/empty -> value changes.
+                                                // Example: Location may be saved as 0 initially, then set later.
+                                                var allowEmptyToValueForExportManualBill =
+                                                    module == "ExportManualBill" && (
+                                                        fieldName.Equals("CATEAID", StringComparison.OrdinalIgnoreCase) ||
+                                                        fieldName.Equals("Location", StringComparison.OrdinalIgnoreCase) ||
+                                                        friendlyFieldName.Equals("Location", StringComparison.OrdinalIgnoreCase) ||
+                                                        fieldName.Equals("STATEID", StringComparison.OrdinalIgnoreCase) ||
+                                                        fieldName.Equals("State", StringComparison.OrdinalIgnoreCase) ||
+                                                        friendlyFieldName.Equals("State", StringComparison.OrdinalIgnoreCase) ||
+                                                        fieldName.Equals("REGSTRID", StringComparison.OrdinalIgnoreCase) ||
+                                                        fieldName.Equals("Tax Type", StringComparison.OrdinalIgnoreCase) ||
+                                                        friendlyFieldName.Equals("Tax Type", StringComparison.OrdinalIgnoreCase) ||
+                                                        fieldName.Equals("TCATEAID", StringComparison.OrdinalIgnoreCase) ||
+                                                        fieldName.Equals("Tally CHA Location", StringComparison.OrdinalIgnoreCase) ||
+                                                        friendlyFieldName.Equals("Tally CHA Location", StringComparison.OrdinalIgnoreCase) ||
+                                                        fieldName.Equals("TSTATEID", StringComparison.OrdinalIgnoreCase)
+                                                    );
+
+                                                if (oldIsEmpty && !allowEmptyToValueForExportManualBill) { continue; }
                                             }
                                             
                                             <tr>
