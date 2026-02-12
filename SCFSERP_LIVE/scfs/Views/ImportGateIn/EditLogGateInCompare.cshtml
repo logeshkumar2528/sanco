@@ -467,6 +467,83 @@
     System.Diagnostics.Debug.WriteLine(string.Format("EditLogGateInCompare View: allFields count={0}", allFields.Count()));
 }
 
+@functions {
+    private class SnapshotLine
+    {
+        public int RowNo { get; set; }
+        public string TrandId { get; set; }
+        public string Value { get; set; }
+    }
+
+    private static bool LooksLikeDetailSnapshot(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        // Common format used by Manual Bill detail snapshot logging:
+        // Row1(TRANDID=123): something
+        return value.IndexOf("Row1(TRANDID=", StringComparison.OrdinalIgnoreCase) >= 0
+            || value.IndexOf("Row2(TRANDID=", StringComparison.OrdinalIgnoreCase) >= 0
+            || value.IndexOf("Row3(TRANDID=", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static List<SnapshotLine> ParseDetailSnapshot(string value)
+    {
+        var result = new List<SnapshotLine>();
+        if (string.IsNullOrWhiteSpace(value)) return result;
+
+        var norm = (value ?? string.Empty).Replace("\r\n", "\n");
+
+        // Robust parse even when Row2 is concatenated after Row1 (no newline).
+        var rx = new System.Text.RegularExpressions.Regex(
+            @"Row(?<row>\d+)\(TRANDID=(?<id>\d+)\)\s*:\s*(?<val>.*?)(?=(?:\s*Row\d+\(TRANDID=)|\z)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline
+        );
+
+        var matches = rx.Matches(norm);
+        if (matches != null && matches.Count > 0)
+        {
+            foreach (System.Text.RegularExpressions.Match m in matches)
+            {
+                int rowNo = 0;
+                int.TryParse(m.Groups["row"].Value, out rowNo);
+                result.Add(new SnapshotLine
+                {
+                    RowNo = rowNo,
+                    TrandId = m.Groups["id"].Value,
+                    Value = (m.Groups["val"].Value ?? string.Empty).Trim()
+                });
+            }
+        }
+        else
+        {
+            // Fallback: keep entire raw as a single entry
+            result.Add(new SnapshotLine { RowNo = 1, TrandId = "", Value = norm.Trim() });
+        }
+
+        return result;
+    }
+
+    private static IHtmlString RenderDetailSnapshot(string value)
+    {
+        var rows = ParseDetailSnapshot(value);
+        if (rows == null || rows.Count == 0)
+        {
+            return new HtmlString(System.Web.HttpUtility.HtmlEncode(value ?? string.Empty));
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append("<div class=\"snapshot-values\">");
+        foreach (var r in rows.OrderBy(x => x.RowNo))
+        {
+            // User requirement: do NOT show Row#/TRANDID labels, only show the values.
+            sb.Append("<div class=\"snapshot-value\">");
+            sb.Append(System.Web.HttpUtility.HtmlEncode((r.Value ?? string.Empty).Trim()));
+            sb.Append("</div>");
+        }
+        sb.Append("</div>");
+        return new HtmlString(sb.ToString());
+    }
+}
+
 <style>
     .diff-yes { background: #fff3cd; }
     .diff-no { background: #e8f5e9; }
@@ -477,6 +554,9 @@
     .old-badge { background: #f2dede; color: #a94442; border-radius: 3px; padding: 2px 6px; display: inline-block; }
     .new-badge { background: #dff0d8; color: #3c763d; border-radius: 3px; padding: 2px 6px; display: inline-block; }
     .empty-value { color: #999; font-style: italic; }
+    .snapshot-values { max-width: 520px; }
+    .snapshot-value { margin: 2px 0 8px; padding-bottom: 6px; border-bottom: 1px dashed rgba(0,0,0,0.12); white-space: pre-wrap; word-break: break-word; }
+    .snapshot-value:last-child { border-bottom: 0; padding-bottom: 0; margin-bottom: 0; }
 </style>
 
 <div class="container-fluid">
@@ -887,7 +967,16 @@
                                     }
                                     else
                                     {
-                                        <span class="old-badge">@Html.Raw(HttpUtility.HtmlEncode(displayValA))</span>
+                                        if (LooksLikeDetailSnapshot(displayValA))
+                                        {
+                                            <div class="old-badge" style="display:block; padding:8px 10px;">
+                                                @RenderDetailSnapshot(displayValA)
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <span class="old-badge">@Html.Raw(HttpUtility.HtmlEncode(displayValA))</span>
+                                        }
                                     }
                                 </td>
                                 <td>
@@ -897,7 +986,16 @@
                                     }
                                     else
                                     {
-                                        <span class="new-badge">@Html.Raw(HttpUtility.HtmlEncode(displayValB))</span>
+                                        if (LooksLikeDetailSnapshot(displayValB))
+                                        {
+                                            <div class="new-badge" style="display:block; padding:8px 10px;">
+                                                @RenderDetailSnapshot(displayValB)
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <span class="new-badge">@Html.Raw(HttpUtility.HtmlEncode(displayValB))</span>
+                                        }
                                     }
                                 </td>
                             </tr>

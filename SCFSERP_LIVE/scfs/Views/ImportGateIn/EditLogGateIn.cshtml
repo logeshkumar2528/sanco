@@ -222,8 +222,8 @@
         "TRANDREFNAME", "Reference Name"
     };
     
-    // For ExBondGateIn, ImportLoadSlip, OpenSheet, StuffingBill, and ImportInvoice, don't exclude Status - user wants to see it
-    if (module != "ExBondGateIn" && module != "ImportLoadSlip" && module != "OpenSheet" && module != "StuffingBill" && module != "ImportInvoice")
+    // For ExBondGateIn, ImportLoadSlip, OpenSheet, StuffingBill, ImportInvoice, and Manual Bills, don't exclude Status - user wants to see it
+    if (module != "ExBondGateIn" && module != "ImportLoadSlip" && module != "OpenSheet" && module != "StuffingBill" && module != "ImportInvoice" && module != "ImportManualBill" && module != "ExportManualBill")
     {
         excludedFields.Add("Status");
         excludedFields.Add("DISPSTATUS");
@@ -249,6 +249,7 @@
     #logTable thead input, #logTable thead select { width: 100%; font-size: 12px; padding: 2px 6px; }
     .old-badge { background: #f2dede; color: #a94442; border-radius: 3px; padding: 2px 6px; display: inline-block; }
     .new-badge { background: #dff0d8; color: #3c763d; border-radius: 3px; padding: 2px 6px; display: inline-block; }
+    .snapshot-badge { display:block; white-space:pre-wrap; word-break:break-word; max-width:520px; padding:8px 10px; }
     .field-label { font-weight: 600; }
     .toolbar { margin: 10px 0; }
     .toolbar .form-control { display: inline-block; width: auto; min-width: 180px; }
@@ -443,6 +444,17 @@
                                                                  friendlyFieldName.IndexOf("Plug", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                                                  friendlyFieldName.IndexOf("FCL", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                                                  friendlyFieldName.IndexOf("Tariff", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                                            // Manual Bill detail fields live in TRANSACTIONDETAIL, but we still want them visible in edit log,
+                                            // including when a value is set from empty/0 -> something.
+                                            var isManualBillDetailField =
+                                                fieldName.Equals("Detail.ACHEADID", StringComparison.OrdinalIgnoreCase) ||
+                                                fieldName.Equals("Detail.TRANDDESC", StringComparison.OrdinalIgnoreCase) ||
+                                                fieldName.Equals("Detail.TRANDREFNO", StringComparison.OrdinalIgnoreCase) ||
+                                                // Fallback: in case controller already converted to friendly labels
+                                                friendlyFieldName.Equals("Account Head", StringComparison.OrdinalIgnoreCase) ||
+                                                friendlyFieldName.Equals("Bill Description", StringComparison.OrdinalIgnoreCase) ||
+                                                friendlyFieldName.Equals("HSN Code", StringComparison.OrdinalIgnoreCase);
                                             
                                             // NEVER exclude target fields - always show them
                                             // For target fields, bypass ALL exclusion checks
@@ -504,6 +516,26 @@
                                                 // This ensures we catch all changes including "1"->"0" or "YES"->"NO"
                                                 // Skip the value comparison check entirely for target fields
                                             }
+                                            else if (isManualBillDetailField)
+                                            {
+                                                // For Manual Bill detail fields, still require "old != new" but DO NOT hide empty/0 -> value changes.
+                                                // Also treat numeric-ish values like "0" as meaningful (don't auto-hide them as empty).
+
+                                                oldIsEmpty = string.IsNullOrEmpty(oldVal) || oldVal == "-" || oldVal == "(not set)" || oldVal == "null" || oldVal == "NULL";
+                                                newIsEmpty = string.IsNullOrEmpty(newVal) || newVal == "-" || newVal == "(not set)" || newVal == "null" || newVal == "NULL";
+
+                                                // If both are empty/equivalent, skip
+                                                if (oldIsEmpty && newIsEmpty)
+                                                {
+                                                    continue;
+                                                }
+
+                                                // Skip if same
+                                                if (string.Equals(oldVal, newVal, StringComparison.OrdinalIgnoreCase))
+                                                {
+                                                    continue;
+                                                }
+                                            }
                                             else
                                             {
                                                 // For non-target fields, apply normal filtering
@@ -548,6 +580,25 @@
                                                 <td class="field-label">@friendlyFieldName</td>
                                                 <td>
                                                     @{
+                                                        Func<string, string> ExtractSnapshotValues = (string v) =>
+                                                        {
+                                                            if (string.IsNullOrWhiteSpace(v)) return v;
+                                                            var norm = (v ?? string.Empty).Replace("\r\n", "\n");
+                                                            var rx = new System.Text.RegularExpressions.Regex(
+                                                                @"Row(?<row>\d+)\(TRANDID=(?<id>\d+)\)\s*:\s*(?<val>.*?)(?=(?:\s*Row\d+\(TRANDID=)|\z)",
+                                                                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline
+                                                            );
+                                                            var matches = rx.Matches(norm);
+                                                            if (matches == null || matches.Count == 0) return v;
+                                                            var vals = new List<string>();
+                                                            foreach (System.Text.RegularExpressions.Match m in matches)
+                                                            {
+                                                                var s = (m.Groups["val"].Value ?? string.Empty).Trim();
+                                                                if (!string.IsNullOrEmpty(s)) vals.Add(s);
+                                                            }
+                                                            return string.Join("\n", vals);
+                                                        };
+
                                                         // Convert numeric values to friendly text for specific fields
                                                         var displayOldVal = oldVal;
                                                         // CRITICAL: Always convert GPETYPE values - this is SSR/Escort
@@ -585,11 +636,38 @@
                                                     }
                                                     else
                                                     {
-                                                        <span class="old-badge">@Html.Raw(HttpUtility.HtmlEncode(displayOldVal))</span>
+                                                        var cleanedOld = (isManualBillDetailField ? ExtractSnapshotValues(displayOldVal) : displayOldVal);
+                                                        if (isManualBillDetailField && !string.IsNullOrWhiteSpace(displayOldVal) && displayOldVal.IndexOf("Row1(TRANDID=", StringComparison.OrdinalIgnoreCase) >= 0)
+                                                        {
+                                                            <div class="old-badge snapshot-badge">@Html.Raw(HttpUtility.HtmlEncode(cleanedOld))</div>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="old-badge">@Html.Raw(HttpUtility.HtmlEncode(cleanedOld))</span>
+                                                        }
                                                     }
                                                 </td>
                                                 <td>
                                                     @{
+                                                        Func<string, string> ExtractSnapshotValuesNew = (string v) =>
+                                                        {
+                                                            if (string.IsNullOrWhiteSpace(v)) return v;
+                                                            var norm = (v ?? string.Empty).Replace("\r\n", "\n");
+                                                            var rx = new System.Text.RegularExpressions.Regex(
+                                                                @"Row(?<row>\d+)\(TRANDID=(?<id>\d+)\)\s*:\s*(?<val>.*?)(?=(?:\s*Row\d+\(TRANDID=)|\z)",
+                                                                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline
+                                                            );
+                                                            var matches = rx.Matches(norm);
+                                                            if (matches == null || matches.Count == 0) return v;
+                                                            var vals = new List<string>();
+                                                            foreach (System.Text.RegularExpressions.Match m in matches)
+                                                            {
+                                                                var s = (m.Groups["val"].Value ?? string.Empty).Trim();
+                                                                if (!string.IsNullOrEmpty(s)) vals.Add(s);
+                                                            }
+                                                            return string.Join("\n", vals);
+                                                        };
+
                                                         // Convert numeric values to friendly text for specific fields
                                                         var displayNewVal = newVal;
                                                         // CRITICAL: Always convert GPETYPE values - this is SSR/Escort
@@ -627,7 +705,15 @@
                                                     }
                                                     else
                                                     {
-                                                        <span class="new-badge">@Html.Raw(HttpUtility.HtmlEncode(displayNewVal))</span>
+                                                        var cleanedNew = (isManualBillDetailField ? ExtractSnapshotValuesNew(displayNewVal) : displayNewVal);
+                                                        if (isManualBillDetailField && !string.IsNullOrWhiteSpace(displayNewVal) && displayNewVal.IndexOf("Row1(TRANDID=", StringComparison.OrdinalIgnoreCase) >= 0)
+                                                        {
+                                                            <div class="new-badge snapshot-badge">@Html.Raw(HttpUtility.HtmlEncode(cleanedNew))</div>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="new-badge">@Html.Raw(HttpUtility.HtmlEncode(cleanedNew))</span>
+                                                        }
                                                     }
                                                 </td>
                                                 <td class="nowrap">@row.ChangedBy</td>
