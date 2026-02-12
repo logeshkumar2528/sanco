@@ -614,7 +614,8 @@
                         foreach (var f in allFields)
                         {
                             // Filter out excluded fields
-                            var fieldName = f ?? string.Empty;
+                            var fieldKey = f; // original key used in dictA/dictB
+                            var fieldName = (f ?? string.Empty).Trim();
                             
                             // Skip "INITIAL" marker field - it's just a placeholder for baseline version
                             if (fieldName.Equals("INITIAL", StringComparison.OrdinalIgnoreCase))
@@ -622,7 +623,27 @@
                                 continue;
                             }
                             
-                            var friendlyFieldName = getFriendlyName(fieldName);
+                            var friendlyFieldName = (getFriendlyName(fieldName) ?? string.Empty).Trim();
+                            var isV0ComparisonNow = isVersionAV0 || isVersionBV0;
+                            
+                            // ExportManualBill: robust removal for fields that can appear with spaces/underscores or extra whitespace
+                            // (ex: HANDL_IGST_AMT vs "HANDL IGST AMT", "Mode Detail " etc.)
+                            // NOTE: If comparing with V0, show ALL fields (bypass exclusions)
+                            if (module == "ExportManualBill" && !isV0ComparisonNow)
+                            {
+                                var normField = new string(fieldName.Where(c => c != '_' && !char.IsWhiteSpace(c)).ToArray());
+                                var normFriendly = new string(friendlyFieldName.Where(c => c != '_' && !char.IsWhiteSpace(c)).ToArray());
+                                
+                                if (normField.Equals("HANDLIGSTAMT", StringComparison.OrdinalIgnoreCase) ||
+                                    normField.Equals("HANDLIGSTEXPRN", StringComparison.OrdinalIgnoreCase) ||
+                                    normFriendly.Equals("HANDLIGSTAMT", StringComparison.OrdinalIgnoreCase) ||
+                                    normFriendly.Equals("HANDLIGSTEXPRN", StringComparison.OrdinalIgnoreCase) ||
+                                    normField.Equals("TRANMODEDETL", StringComparison.OrdinalIgnoreCase) ||
+                                    normFriendly.Equals("MODEDETAIL", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    continue;
+                                }
+                            }
                             
                             // For StuffingBill, allow specific fields even if they're in excludedFields
                             bool isStuffingBillAllowedField = module == "StuffingBill" && (
@@ -661,14 +682,15 @@
                                 friendlyFieldName.Equals("Weight", StringComparison.OrdinalIgnoreCase) ||
                                 friendlyFieldName.Equals("Billed To", StringComparison.OrdinalIgnoreCase));
                             
-                            if (!isStuffingBillAllowedField && !isSealAllowedField && (excludedFields.Contains(fieldName) || excludedFields.Contains(friendlyFieldName)))
+                            // If comparing with V0, show ALL fields (do not apply excludedFields filtering)
+                            if (!isV0ComparisonNow && !isStuffingBillAllowedField && !isSealAllowedField && (excludedFields.Contains(fieldName) || excludedFields.Contains(friendlyFieldName)))
                             {
                                 continue;
                             }
                             
                             // Get the final state value for each version
-                            var va = dictA.ContainsKey(f) ? dictA[f] : "";
-                            var vb = dictB.ContainsKey(f) ? dictB[f] : "";
+                            var va = dictA.ContainsKey(fieldKey) ? dictA[fieldKey] : "";
+                            var vb = dictB.ContainsKey(fieldKey) ? dictB[fieldKey] : "";
                             
                             // For the "Old Value" column (Version A), use Version A's value
                             // If Version A is v0 (baseline), use NewValue from v0 records
@@ -692,11 +714,11 @@
                                 else if (string.IsNullOrEmpty(valA) || valA == "Initial State")
                                 {
                                     // V0 doesn't have this field value - try to get it from V1's OldValue
-                                    if (dictB_Old.ContainsKey(f) && !string.IsNullOrEmpty(dictB_Old[f]))
+                                    if (dictB_Old.ContainsKey(fieldKey) && !string.IsNullOrEmpty(dictB_Old[fieldKey]))
                                     {
-                                        valA = dictB_Old[f];
+                                        valA = dictB_Old[fieldKey];
                                     }
-                                    else if (dictB.ContainsKey(f) && !string.IsNullOrEmpty(vb))
+                                    else if (dictB.ContainsKey(fieldKey) && !string.IsNullOrEmpty(vb))
                                     {
                                         // If V1 doesn't have OldValue, but has NewValue, the field was added in V1
                                         // Leave valA empty to show it was added
@@ -728,22 +750,22 @@
                             {
                                 // Neither is v0 - use standard comparison logic
                                 // If Version A doesn't have the field but Version B does, use Version B's OldValue as baseline
-                                if (string.IsNullOrEmpty(valA) && dictB.ContainsKey(f))
+                                if (string.IsNullOrEmpty(valA) && dictB.ContainsKey(fieldKey))
                                 {
-                                    if (dictB_Old.ContainsKey(f) && !string.IsNullOrEmpty(dictB_Old[f]))
+                                    if (dictB_Old.ContainsKey(fieldKey) && !string.IsNullOrEmpty(dictB_Old[fieldKey]))
                                     {
-                                        valA = dictB_Old[f];
+                                        valA = dictB_Old[fieldKey];
                                     }
                                 }
                                 // If Version B has a change record and Version A's value equals Version B's NewValue,
                                 // use Version B's OldValue to show the actual change
-                                else if (dictB.ContainsKey(f) && dictB_Old.ContainsKey(f) && !string.IsNullOrEmpty(dictB_Old[f]))
+                                else if (dictB.ContainsKey(fieldKey) && dictB_Old.ContainsKey(fieldKey) && !string.IsNullOrEmpty(dictB_Old[fieldKey]))
                                 {
                                     // Version B has this field with a change record
                                     // If Version A's final state equals Version B's final state, use Version B's OldValue to show the change
                                     if (va == vb || string.IsNullOrEmpty(va))
                                     {
-                                        valA = dictB_Old[f];
+                                        valA = dictB_Old[fieldKey];
                                     }
                                 }
                             }
