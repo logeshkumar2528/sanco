@@ -1,4 +1,4 @@
-﻿using CrystalDecisions.CrystalReports.Engine;
+using CrystalDecisions.CrystalReports.Engine;
 using CrystalDecisions.Shared;
 using scfs_erp.Context;
 using scfs.Data;
@@ -755,7 +755,21 @@ namespace scfs_erp.Controllers.Import
                         transactionmaster.TRANDATE = Convert.ToDateTime(F_Form["masterdata[0].TRANTIME"]).Date;
                         transactionmaster.TRANTIME = Convert.ToDateTime(F_Form["masterdata[0].TRANTIME"]);
                         transactionmaster.TRANREFID = Convert.ToInt32(F_Form["masterdata[0].TRANREFID"]);
-                        transactionmaster.TRANREFNAME = F_Form["masterdata[0].TRANREFNAME"].ToString();
+                        // Derive CHA name from selected CHA id to avoid saving stale/mismatched text
+                        try
+                        {
+                            var chaName = context.categorymasters
+                                .Where(x => x.CATEID == transactionmaster.TRANREFID)
+                                .Select(x => x.CATENAME)
+                                .FirstOrDefault();
+                            transactionmaster.TRANREFNAME = !string.IsNullOrWhiteSpace(chaName)
+                                ? chaName
+                                : Convert.ToString(F_Form["masterdata[0].TRANREFNAME"]);
+                        }
+                        catch
+                        {
+                            transactionmaster.TRANREFNAME = Convert.ToString(F_Form["masterdata[0].TRANREFNAME"]);
+                        }
                         transactionmaster.LCATEID = 0;
                         transactionmaster.TRANBTYPE = Convert.ToInt16(F_Form["TRANBTYPE"]);
                         transactionmaster.REGSTRID = Convert.ToInt16(F_Form["REGSTRID"]);
@@ -1180,7 +1194,21 @@ namespace scfs_erp.Controllers.Import
                         }
 
                         transactionmaster.TRANREFID = Convert.ToInt32(F_Form["masterdata[0].TRANREFID"]);
-                        transactionmaster.TRANREFNAME = F_Form["masterdata[0].TRANREFNAME"].ToString();
+                        // Derive CHA name from selected CHA id to avoid saving stale/mismatched text
+                        try
+                        {
+                            var chaName = context.categorymasters
+                                .Where(x => x.CATEID == transactionmaster.TRANREFID)
+                                .Select(x => x.CATENAME)
+                                .FirstOrDefault();
+                            transactionmaster.TRANREFNAME = !string.IsNullOrWhiteSpace(chaName)
+                                ? chaName
+                                : Convert.ToString(F_Form["masterdata[0].TRANREFNAME"]);
+                        }
+                        catch
+                        {
+                            transactionmaster.TRANREFNAME = Convert.ToString(F_Form["masterdata[0].TRANREFNAME"]);
+                        }
                         transactionmaster.LCATEID = 0;
                         
                         if (TRANMID == 0)
@@ -1244,7 +1272,21 @@ namespace scfs_erp.Controllers.Import
                         transactionmaster.TRANIMPADDR4 = Convert.ToString(F_Form["masterdata[0].TRANIMPADDR4"]);
 
                         transactionmaster.TRANTALLYCHAID = Convert.ToInt32(F_Form["masterdata[0].TRANTALLYCHAID"]);
-                        transactionmaster.TRANTALLYCHANAME = F_Form["masterdata[0].TRANTALLYCHANAME"].ToString();
+                        // Derive Tally CHA name from selected id
+                        try
+                        {
+                            var tallyChaName = context.categorymasters
+                                .Where(x => x.CATEID == transactionmaster.TRANTALLYCHAID)
+                                .Select(x => x.CATENAME)
+                                .FirstOrDefault();
+                            transactionmaster.TRANTALLYCHANAME = !string.IsNullOrWhiteSpace(tallyChaName)
+                                ? tallyChaName
+                                : Convert.ToString(F_Form["masterdata[0].TRANTALLYCHANAME"]);
+                        }
+                        catch
+                        {
+                            transactionmaster.TRANTALLYCHANAME = Convert.ToString(F_Form["masterdata[0].TRANTALLYCHANAME"]);
+                        }
                         transactionmaster.TCATEAGSTNO = Convert.ToString(F_Form["masterdata[0].TCATEAGSTNO"]);
 
                         string TCATEAID = Convert.ToString(F_Form["TCATEAID"]);

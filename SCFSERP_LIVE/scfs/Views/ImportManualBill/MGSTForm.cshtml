@@ -1,4 +1,4 @@
-﻿
+
 @using scfs_erp.Models;
 @model scfs_erp.Models.TransactionMD
 
@@ -39,7 +39,7 @@
                         </div>
                     </div>
                     <div class="box-content" data-ng-app="myModule">
-                        <form action="@Url.Content("~/ImportManualBill/msavedata ")" method="post" accept-charset="utf-8" id="frm" data-ng-controller="myController" name="frm" onsubmit="return Validate()">
+                        <form action="@Url.Content("~/ImportManualBill/msavedata")" method="post" accept-charset="utf-8" id="frm" data-ng-controller="myController" name="frm" onsubmit="return Validate()">
                             @Html.ValidationSummary(true)
                             <fieldset id="ImportManualBill_info">
                                 <div class="row">
@@ -535,10 +535,42 @@
 
 @section Scripts {
     <script type="text/javascript">
+        // CHA baseline (shared by handlers + autocomplete callbacks)
+        var chaOriginalName = "";
+        var chaOriginalId = "0";
+        var tallyChaOriginalName = "";
+        var tallyChaOriginalId = "0";
+
         $(document).ready(function () {
             window.onbeforeunload = function () {
                 $("input[type=submit]").attr("disabled", "disabled");
             };
+
+            // Keep CHA name/id in sync:
+            // - typing in the name clears the hidden id (prevents saving old id with new text)
+            // - selecting from autocomplete updates the hidden id and becomes the new baseline
+            chaOriginalName = ($("#TRANREFNAME").val() || "").trim();
+            chaOriginalId = ($("#TRANREFID").val() || "0").toString();
+            tallyChaOriginalName = ($("#TRANTALLYCHANAME").val() || "").trim();
+            tallyChaOriginalId = ($("#TRANTALLYCHAID").val() || "0").toString();
+
+            $("#TRANREFNAME").on("input", function () {
+                var cur = ($(this).val() || "").trim();
+                if (cur === chaOriginalName) {
+                    $("#TRANREFID").val(chaOriginalId || "0");
+                } else {
+                    $("#TRANREFID").val("0");
+                }
+            });
+
+            $("#TRANTALLYCHANAME").on("input", function () {
+                var cur = ($(this).val() || "").trim();
+                if (cur === tallyChaOriginalName) {
+                    $("#TRANTALLYCHAID").val(tallyChaOriginalId || "0");
+                } else {
+                    $("#TRANTALLYCHAID").val("0");
+                }
+            });
 
             stuffing_autocomplete($("#TRANREFNAME"), "TRANREFNAME,TRANREFID");
             add_autocomplete($("#TRANTALLYCHANAME"), "TRANTALLYCHANAME,TRANTALLYCHAID");
@@ -1132,36 +1164,12 @@
                         },
                         success: function (data) {
                             response($.map(data, function (item) {
-                                count = 0;
-                                item_str = "";
-                                var jsonArg = new Object();
-                                count = 0;
-                                $.each(item, function (i, data) {
-                                    switch (count) {
-                                        case 0:
-                                            jsonArg.label = data;
-                                            jsonArg.value = data;
-                                            break;
-                                        case 1:
-                                            jsonArg.id = data;
-                                            break;
-                                        case 2:
-                                            jsonArg.desc = data;
-                                            break;
-                                        case 3:
-                                            jsonArg.xparam1 = data;
-                                            break;
-                                        case 4:
-                                            jsonArg.xparam2 = data;
-                                            break;
-                                        case 5:
-                                            jsonArg.xparam3 = data;
-                                            break
-                                    }
-                                    count++
-                                });
-                                return jsonArg
-                            }))
+                                return {
+                                    label: item.CATENAME,
+                                    value: item.CATENAME,
+                                    id: item.CATEID
+                                };
+                            }));
                         }
                     })
                 },
@@ -1173,29 +1181,9 @@
                 },
                 select: function (event, ui) {
                     $(this).val(ui.item.label);
-                    count = 0;
-                    $.each(controls.split(','), function (index, value) {
-                        switch (count) {
-                            case 1:
-                                $("#" + value).val(ui.item.id);
-                                break;
-                            case 2:
-                                $("#" + value).val(ui.item.desc);
-                                break;
-                            case 3:
-                                $("#" + value).val(ui.item.xparam1);
-                                break;
-                            case 4:
-                                $("#" + value).val(ui.item.xparam2);
-                                break;
-                            case 5:
-                                $("#" + value).val(ui.item.xparam3);
-                                break;
-                        }
-                        count++
-
-                    });
                     $("#TRANREFID").val(ui.item.id);
+                    chaOriginalName = (ui.item.label || "").trim();
+                    chaOriginalId = (ui.item.id || "0").toString();
                     if ($('#TRANREFID').val() > 0) {
                         locationdetail($('#TRANREFID').val());
                     }
@@ -1322,6 +1310,8 @@
 
                     });
                     $("#TRANTALLYCHAID").val(ui.item.id);
+                    tallyChaOriginalName = (ui.item.label || "").trim();
+                    tallyChaOriginalId = (ui.item.id || "0").toString();
                     if ($('#TRANTALLYCHAID').val() > 0) {
                         tally_locationdetail($('#TRANTALLYCHAID').val());
                     }
