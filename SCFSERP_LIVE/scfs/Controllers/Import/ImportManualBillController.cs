@@ -3215,53 +3215,73 @@ namespace scfs_erp.Controllers.Import
                 dictAccountHead = new Dictionary<int, string>();
             }
 
-            string BuildSnapshot(IEnumerable<TransactionDetail> rows, Func<TransactionDetail, string> selector)
+            void BuildDiffSnapshot(
+                Func<TransactionDetail, string> selector,
+                out string oldSnapshot,
+                out string newSnapshot)
             {
-                var ordered = (rows ?? Enumerable.Empty<TransactionDetail>())
-                    .OrderBy(x => x.TRANDID)
-                    .ToList();
+                // Compare by TRANDID so we only log the rows that actually changed
+                var beforeById = beforeDetails
+                    .GroupBy(x => x.TRANDID)
+                    .ToDictionary(g => g.Key, g => g.First());
+                var afterById = afterDetails
+                    .GroupBy(x => x.TRANDID)
+                    .ToDictionary(g => g.Key, g => g.First());
 
-                if (!ordered.Any()) return string.Empty;
+                var ids = beforeById.Keys.Union(afterById.Keys).OrderBy(x => x).ToList();
 
-                var lines = new List<string>(ordered.Count);
-                for (int i = 0; i < ordered.Count; i++)
+                var oldLines = new List<string>();
+                var newLines = new List<string>();
+                int rowNo = 0;
+
+                foreach (var id in ids)
                 {
-                    var d = ordered[i];
-                    var val = (selector(d) ?? string.Empty).Trim();
-                    lines.Add($"Row{i + 1}(TRANDID={d.TRANDID}): {val}");
+                    TransactionDetail b = null;
+                    TransactionDetail a = null;
+                    beforeById.TryGetValue(id, out b);
+                    afterById.TryGetValue(id, out a);
+
+                    var ov = (b != null ? selector(b) : string.Empty) ?? string.Empty;
+                    var nv = (a != null ? selector(a) : string.Empty) ?? string.Empty;
+                    ov = ov.Trim();
+                    nv = nv.Trim();
+
+                    if (string.Equals(ov, nv, StringComparison.Ordinal))
+                        continue; // unchanged row -> don't log
+
+                    rowNo++;
+                    oldLines.Add($"Row{rowNo}(TRANDID={id}): {ov}");
+                    newLines.Add($"Row{rowNo}(TRANDID={id}): {nv}");
                 }
-                return string.Join(Environment.NewLine, lines);
+
+                oldSnapshot = string.Join(Environment.NewLine, oldLines);
+                newSnapshot = string.Join(Environment.NewLine, newLines);
             }
 
-            string oldAccountHead = BuildSnapshot(beforeDetails, d =>
+            Func<TransactionDetail, string> accountHeadSelector = d =>
             {
                 var id = d.ACHEADID;
                 var name = dictAccountHead != null && dictAccountHead.ContainsKey(id) ? dictAccountHead[id] : "";
                 if (!string.IsNullOrWhiteSpace(name))
                     return $"{id} - {name}";
                 return id.ToString();
-            });
-            string newAccountHead = BuildSnapshot(afterDetails, d =>
-            {
-                var id = d.ACHEADID;
-                var name = dictAccountHead != null && dictAccountHead.ContainsKey(id) ? dictAccountHead[id] : "";
-                if (!string.IsNullOrWhiteSpace(name))
-                    return $"{id} - {name}";
-                return id.ToString();
-            });
+            };
 
-            string oldBillDesc = BuildSnapshot(beforeDetails, d => d.TRANDDESC);
-            string newBillDesc = BuildSnapshot(afterDetails, d => d.TRANDDESC);
+            string oldAccountHead, newAccountHead;
+            BuildDiffSnapshot(accountHeadSelector, out oldAccountHead, out newAccountHead);
 
-            string oldHsn = BuildSnapshot(beforeDetails, d => d.TRANDREFNO); // HSN Code stored in TRANDREFNO
-            string newHsn = BuildSnapshot(afterDetails, d => d.TRANDREFNO);
+            string oldBillDesc, newBillDesc;
+            BuildDiffSnapshot(d => d.TRANDDESC, out oldBillDesc, out newBillDesc);
 
-            // Insert only when changed
-            if (!string.Equals(oldAccountHead?.Trim() ?? "", newAccountHead?.Trim() ?? "", StringComparison.Ordinal))
+            string oldHsn, newHsn;
+            BuildDiffSnapshot(d => d.TRANDREFNO, out oldHsn, out newHsn); // HSN Code stored in TRANDREFNO
+
+            // Insert only when there is at least one changed row for that field
+            if (!string.IsNullOrWhiteSpace(oldAccountHead) || !string.IsNullOrWhiteSpace(newAccountHead))
                 InsertEditLogRow(editLogConnectionString, gidno, "Detail.ACHEADID", oldAccountHead, newAccountHead, userId, versionLabel, "ImportManualBill");
-            if (!string.Equals(oldBillDesc?.Trim() ?? "", newBillDesc?.Trim() ?? "", StringComparison.Ordinal))
+            if (!string.IsNullOrWhiteSpace(oldBillDesc) || !string.IsNullOrWhiteSpace(newBillDesc))
                 InsertEditLogRow(editLogConnectionString, gidno, "Detail.TRANDDESC", oldBillDesc, newBillDesc, userId, versionLabel, "ImportManualBill");
-            if (!string.Equals(oldHsn?.Trim() ?? "", newHsn?.Trim() ?? "", StringComparison.Ordinal))
+            if (!string.IsNullOrWhiteSpace(oldHsn) || !string.IsNullOrWhiteSpace(newHsn))
                 InsertEditLogRow(editLogConnectionString, gidno, "Detail.TRANDREFNO", oldHsn, newHsn, userId, versionLabel, "ImportManualBill");
         }
 
