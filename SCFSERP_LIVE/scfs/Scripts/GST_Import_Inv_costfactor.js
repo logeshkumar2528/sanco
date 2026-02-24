@@ -1,4 +1,4 @@
-﻿function sel_text(obj, dest) {
+function sel_text(obj, dest) {
     row = obj.parentNode.parentNode.rowIndex;
     var modelLength = obj.options[obj.selectedIndex].text;
     $("." + dest)[row - 1].value = modelLength;
@@ -516,13 +516,14 @@ $(document).ready(function () {
         $('.TAX').each(function () {
 
             tax_param = tax_param + $.trim(this.value) + ",";
-            pos = $('#CFACTOR tr').eq(($('#CFACTOR tr').length - ($('#CFACTOR tr').length)) + 1);
+            pos = $(this).closest('tr');
             idx = $('#CFACTOR tr').length - 2;
             desc = pos.find(".CFDESC").val();
             tax = pos.find(".TAX").val();
             cfval = pos.find(".TMPCFVAL").val();
-            pos.find('td:eq(1)').html("<input type=text value=" + cfval + " id='TMPCFVAL' class='TMPCFVAL' name='TMPCFVAL' style='display:none' ><input type=text value=" + tax + " id='TAX' class='TAX' name='TAX' style='display:none' >" + desc + "<input type=text style='border:none' readonly=readonly value='" + desc + "' name=CFDESC id='CFDESC' class='CFDESC hide'> ");
-
+            if (pos.length && desc !== undefined) {
+                pos.find('td:eq(1)').html("<input type=text value=" + (cfval || '') + " id='TMPCFVAL' class='TMPCFVAL' name='TMPCFVAL' style='display:none' ><input type=text value=" + (tax || '') + " id='TAX' class='TAX' name='TAX' style='display:none' >" + (desc || '') + "<input type=text style='border:none' readonly=readonly value='" + (desc || '') + "' name=CFDESC id='CFDESC' class='CFDESC hide'> ");
+            }
             i++;
         });
 
@@ -536,14 +537,15 @@ $(document).ready(function () {
             data: formData,
             success: function (data, textStatus, jqXHR) {
                 //data - response from server
-                alert(data);
                 if (data.length != 0) {
-                    $trFirst.before("<tr class='item-row'><Td> <button href='#'   type='button' onclick='del_factor(this)' class='btn btn-danger dfact btn-xs'><i class=glyphicon-minus></i> </button>  </td> <td>" + data + " </td><td><input  type=text value='' name=CFAMOUNT id='CFAMOUNT' class='CFAMOUNT' readonly='readonly'> </td>  </TD></tr>");
+                    var newRow = "<tr class='item-row'><Td> <button href='#'   type='button' onclick='del_factor(this)' class='btn btn-danger dfact btn-xs'><i class=glyphicon-minus></i> </button>  </td> <td>" + data + " </td><td><input  type=text value='' name=CFAMOUNT id='CFAMOUNT' class='CFAMOUNT' readonly='readonly'> </td>  </TD></tr>";
+                    if ($trFirst.length) {
+                        $trFirst.before(newRow);
+                    } else {
+                        $tableBody.append(newRow);
+                    }
                 }
-               // totalonchange(this);
                 total();
-
-
             },
             error: function (jqXHR, textStatus, errorThrown) {
 

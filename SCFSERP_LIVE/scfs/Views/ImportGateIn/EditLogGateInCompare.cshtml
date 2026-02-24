@@ -650,6 +650,31 @@
                                     continue;
                                 }
                             }
+
+                            // ImportVehicleTicket / ExBondVehicleTicket: hide fields not required in compare view
+                            // (ASL ID, Description, Gate In ID, Type)
+                            if (module == "ImportVehicleTicket" || module == "ExBondVehicleTicket")
+                            {
+                                var isUnwantedVehicleField =
+                                    // Friendly names
+                                    friendlyFieldName.Equals("ASL ID", StringComparison.OrdinalIgnoreCase) ||
+                                    friendlyFieldName.Equals("Description", StringComparison.OrdinalIgnoreCase) ||
+                                    friendlyFieldName.Equals("Gate In ID", StringComparison.OrdinalIgnoreCase) ||
+                                    friendlyFieldName.Equals("Gate In Detail ID", StringComparison.OrdinalIgnoreCase) ||
+                                    friendlyFieldName.Equals("Type", StringComparison.OrdinalIgnoreCase) ||
+                                    // Raw field keys for safety
+                                    fieldName.Equals("ASLDID", StringComparison.OrdinalIgnoreCase) ||
+                                    fieldName.Equals("VTDESC", StringComparison.OrdinalIgnoreCase) ||
+                                    fieldName.Equals("VTTYPE", StringComparison.OrdinalIgnoreCase) ||
+                                    fieldName.Equals("GIDID", StringComparison.OrdinalIgnoreCase) ||
+                                    fieldName.Equals("EGIDID", StringComparison.OrdinalIgnoreCase) ||
+                                    fieldName.Equals("CGIDID", StringComparison.OrdinalIgnoreCase);
+
+                                if (isUnwantedVehicleField)
+                                {
+                                    continue;
+                                }
+                            }
                             
                             // ExportManualBill: robust removal for fields that can appear with spaces/underscores or extra whitespace
                             // (ex: HANDL_IGST_AMT vs "HANDL IGST AMT", "Mode Detail " etc.)
