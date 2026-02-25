@@ -4452,10 +4452,12 @@ namespace scfs_erp.Controllers.Import
                         FROM [dbo].[GateInDetailEditLog]
                         WHERE [GIDNO] = @GIDNO 
                         AND [Modules] = @Modules
-                        AND (RTRIM(LTRIM([Version])) = @VLower 
-                             OR RTRIM(LTRIM([Version])) = @VUpper 
-                             OR RTRIM(LTRIM([Version])) = '0' 
-                             OR RTRIM(LTRIM([Version])) = 'V0')", sql))
+                        AND (
+                             LOWER(RTRIM(LTRIM([Version]))) = LOWER(RTRIM(LTRIM(@VLower)))
+                             OR LOWER(RTRIM(LTRIM([Version]))) = LOWER(RTRIM(LTRIM(@VUpper)))
+                             OR LOWER(RTRIM(LTRIM([Version]))) = '0'
+                             OR LOWER(RTRIM(LTRIM([Version]))) = 'v0'
+                        )", sql))
                     {
                         cmd.Parameters.AddWithValue("@GIDNO", gidno);
                         cmd.Parameters.AddWithValue("@Modules", modules);

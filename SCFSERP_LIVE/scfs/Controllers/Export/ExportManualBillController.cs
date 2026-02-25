@@ -1828,9 +1828,22 @@ namespace scfs_erp.Controllers.Export
                 }
             }
 
-            // Normalize version strings (remove any whitespace/tabs)
-            versionA = (versionA ?? string.Empty).Trim();
-            versionB = (versionB ?? string.Empty).Trim();
+            string NormalizeVersion(string v, string gidno)
+            {
+                v = (v ?? string.Empty).Trim().Replace("\t", "").Replace("\r", "").Replace("\n", "");
+                if (string.IsNullOrWhiteSpace(v)) return v;
+                if (string.Equals(v, "0", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(v, "V0", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(v, "v0", StringComparison.OrdinalIgnoreCase) ||
+                    v.StartsWith("v0-", StringComparison.OrdinalIgnoreCase) ||
+                    v.StartsWith("V0-", StringComparison.OrdinalIgnoreCase))
+                    return "v0-" + gidno;
+
+                if (int.TryParse(v, out var n) && n >= 0)
+                    return "V" + n + "-" + gidno;
+
+                return v;
+            }
 
             if (tranmid == null || string.IsNullOrWhiteSpace(versionA) || string.IsNullOrWhiteSpace(versionB))
             {
@@ -1841,12 +1854,8 @@ namespace scfs_erp.Controllers.Export
             // Use TRANMID as the primary identifier (consistent with logging)
             string gidnoString = tranmid.HasValue ? tranmid.Value.ToString() : "";
 
-            // Support baseline shortcuts
-            var baseLabel = "v0-" + gidnoString;
-            if (string.Equals(versionA, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionA, "V0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionA, "v0", StringComparison.OrdinalIgnoreCase))
-                versionA = baseLabel;
-            if (string.Equals(versionB, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionB, "V0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionB, "v0", StringComparison.OrdinalIgnoreCase))
-                versionB = baseLabel;
+            versionA = NormalizeVersion(versionA, gidnoString);
+            versionB = NormalizeVersion(versionB, gidnoString);
 
             var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
             var a = new List<scfs_erp.Models.GateInDetailEditLogRow>();
@@ -1856,18 +1865,14 @@ namespace scfs_erp.Controllers.Export
                 using (var sql = new SqlConnection(cs.ConnectionString))
                 using (var cmd = new SqlCommand(@"SELECT [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
                                                 FROM [dbo].[GateInDetailEditLog]
-                                                WHERE [GIDNO]=@GIDNO AND [Modules]='ExportManualBill' AND (RTRIM(LTRIM([Version]))=@V OR RTRIM(LTRIM([Version]))=@VLower OR RTRIM(LTRIM([Version]))=@VUpper)", sql))
+                                                WHERE [GIDNO]=@GIDNO AND [Modules]='ExportManualBill' AND LOWER(RTRIM(LTRIM([Version]))) = LOWER(RTRIM(LTRIM(@V)))", sql))
                 {
                     cmd.Parameters.Add("@GIDNO", System.Data.SqlDbType.NVarChar, 50);
                     cmd.Parameters.Add("@V", System.Data.SqlDbType.NVarChar, 100);
-                    cmd.Parameters.Add("@VLower", System.Data.SqlDbType.NVarChar, 100);
-                    cmd.Parameters.Add("@VUpper", System.Data.SqlDbType.NVarChar, 100);
 
                     sql.Open();
                     cmd.Parameters["@GIDNO"].Value = gidnoString;
                     cmd.Parameters["@V"].Value = versionA.Trim();
-                    cmd.Parameters["@VLower"].Value = versionA.Trim().ToLower();
-                    cmd.Parameters["@VUpper"].Value = versionA.Trim().ToUpper();
                     using (var r = cmd.ExecuteReader())
                     {
                         while (r.Read())
@@ -1887,8 +1892,6 @@ namespace scfs_erp.Controllers.Export
                     }
 
                     cmd.Parameters["@V"].Value = versionB.Trim();
-                    cmd.Parameters["@VLower"].Value = versionB.Trim().ToLower();
-                    cmd.Parameters["@VUpper"].Value = versionB.Trim().ToUpper();
                     using (var r2 = cmd.ExecuteReader())
                     {
                         while (r2.Read())
@@ -2606,7 +2609,7 @@ namespace scfs_erp.Controllers.Export
                     sql.Open();
                     using (var cmd = new SqlCommand(@"SELECT COUNT(*) FROM [dbo].[GateInDetailEditLog] 
                                                     WHERE [GIDNO] = @GIDNO AND [Modules] = 'ExportManualBill' 
-                                                    AND RTRIM(LTRIM([Version])) = @V", sql))
+                                                    AND LOWER(RTRIM(LTRIM([Version]))) = LOWER(RTRIM(LTRIM(@V)))", sql))
                     {
                         cmd.Parameters.AddWithValue("@GIDNO", gidno);
                         cmd.Parameters.AddWithValue("@V", baselineVer);

@@ -1363,7 +1363,7 @@ namespace scfs_erp.Controllers
                     using (var cmd = new SqlCommand(@"
                         IF NOT EXISTS (
                             SELECT 1 FROM [dbo].[GateInDetailEditLog]
-                            WHERE [GIDNO] = @GIDNO AND [Modules] = 'Stuffing' AND RTRIM(LTRIM([Version])) = @VERSION
+                            WHERE [GIDNO] = @GIDNO AND [Modules] = 'Stuffing' AND LOWER(RTRIM(LTRIM([Version]))) = LOWER(RTRIM(LTRIM(@VERSION)))
                         )
                         BEGIN
                             INSERT INTO [dbo].[GateInDetailEditLog] ([GIDNO], [FieldName], [OldValue], [NewValue], [ChangedBy], [ChangedOn], [Version], [Modules])

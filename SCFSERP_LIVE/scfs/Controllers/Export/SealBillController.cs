@@ -2088,7 +2088,7 @@ namespace scfs_erp.Controllers.Export
                     sql.Open();
                     using (var cmd = new SqlCommand(@"SELECT COUNT(*) FROM [dbo].[GateInDetailEditLog] 
                                                     WHERE [GIDNO] = @GIDNO AND [Modules] = 'SealBill' 
-                                                    AND RTRIM(LTRIM([Version])) = @V", sql))
+                                                    AND LOWER(RTRIM(LTRIM([Version]))) = LOWER(RTRIM(LTRIM(@V)))", sql))
                     {
                         cmd.Parameters.AddWithValue("@GIDNO", gidno);
                         cmd.Parameters.AddWithValue("@V", baselineVer);

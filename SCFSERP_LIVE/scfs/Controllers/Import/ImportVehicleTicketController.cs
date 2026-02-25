@@ -1083,28 +1083,30 @@ namespace scfs_erp.Controllers.Import
                 vtdnoString = vehicleTicket.VTDNO;
             }
 
-            // Normalize version strings
-            versionA = (versionA ?? string.Empty).Trim();
-            versionB = (versionB ?? string.Empty).Trim();
-            
-            // Map '0' or 'v0'/'V0' to 'v0-<VTDNO>' for baseline comparisons
-            if (vtdid.HasValue)
+            string NormalizeVersion(string v, string gidno)
             {
-                var baseLabel = "v0-" + vtdnoString;
-                if (string.Equals(versionA, "0", StringComparison.OrdinalIgnoreCase) || 
-                    string.Equals(versionA, "V0", StringComparison.OrdinalIgnoreCase) || 
-                    string.Equals(versionA, "v0", StringComparison.OrdinalIgnoreCase))
-                    versionA = baseLabel;
-                if (string.Equals(versionB, "0", StringComparison.OrdinalIgnoreCase) || 
-                    string.Equals(versionB, "V0", StringComparison.OrdinalIgnoreCase) || 
-                    string.Equals(versionB, "v0", StringComparison.OrdinalIgnoreCase))
-                    versionB = baseLabel;
+                v = (v ?? string.Empty).Trim().Replace("\t", "").Replace("\r", "").Replace("\n", "");
+                if (string.IsNullOrWhiteSpace(v)) return v;
+                if (string.Equals(v, "0", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(v, "V0", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(v, "v0", StringComparison.OrdinalIgnoreCase) ||
+                    v.StartsWith("v0-", StringComparison.OrdinalIgnoreCase) ||
+                    v.StartsWith("V0-", StringComparison.OrdinalIgnoreCase))
+                    return "v0-" + gidno;
+
+                if (int.TryParse(v, out var n) && n >= 0)
+                    return "V" + n + "-" + gidno;
+
+                return v;
             }
+
+            versionA = NormalizeVersion(versionA, vtdnoString);
+            versionB = NormalizeVersion(versionB, vtdnoString);
 
             var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
             var rowsA = new List<scfs_erp.Models.GateInDetailEditLogRow>();
             var rowsB = new List<scfs_erp.Models.GateInDetailEditLogRow>();
-            
+
             if (cs != null && !string.IsNullOrWhiteSpace(cs.ConnectionString))
             {
                 using (var sql = new SqlConnection(cs.ConnectionString))
@@ -1112,7 +1114,7 @@ namespace scfs_erp.Controllers.Import
                                                 FROM [dbo].[GateInDetailEditLog]
                                                 WHERE [Modules] = 'ImportVehicleTicket'
                                                   AND (CAST([GIDNO] AS NVARCHAR(50)) = @VTDNO_STR OR CAST([GIDNO] AS NVARCHAR(50)) = CAST(@VTDID AS NVARCHAR(50)))
-                                                  AND RTRIM(LTRIM([Version])) = @V", sql))
+                                                  AND LOWER(RTRIM(LTRIM([Version]))) = LOWER(RTRIM(LTRIM(@V)))", sql))
                 {
                     cmd.Parameters.Add("@VTDID", System.Data.SqlDbType.Int);
                     cmd.Parameters.Add("@VTDNO_STR", System.Data.SqlDbType.NVarChar, 50);

@@ -936,22 +936,27 @@ namespace scfs_erp.Controllers.Import
                 aslmdnoString = deStuffRecord.ASLMDNO;
             }
 
-            versionA = (versionA ?? string.Empty).Trim();
-            versionB = (versionB ?? string.Empty).Trim();
-            
-            if (aslmid.HasValue)
+            string NormalizeVersion(string v, string gidno)
             {
-                var baseLabel = "v0-" + aslmdnoString;
-                if (string.Equals(versionA, "0", StringComparison.OrdinalIgnoreCase) || 
-                    string.Equals(versionA, "V0", StringComparison.OrdinalIgnoreCase) || 
-                    string.Equals(versionA, "v0", StringComparison.OrdinalIgnoreCase))
-                    versionA = baseLabel;
-                if (string.Equals(versionB, "0", StringComparison.OrdinalIgnoreCase) || 
-                    string.Equals(versionB, "V0", StringComparison.OrdinalIgnoreCase) || 
-                    string.Equals(versionB, "v0", StringComparison.OrdinalIgnoreCase))
-                    versionB = baseLabel;
+                v = (v ?? string.Empty).Trim().Replace("\t", "").Replace("\r", "").Replace("\n", "");
+                if (string.IsNullOrWhiteSpace(v)) return v;
+                if (string.Equals(v, "0", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(v, "V0", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(v, "v0", StringComparison.OrdinalIgnoreCase) ||
+                    v.StartsWith("v0-", StringComparison.OrdinalIgnoreCase) ||
+                    v.StartsWith("V0-", StringComparison.OrdinalIgnoreCase))
+                    return "v0-" + gidno;
+
+                // If user entered a plain number like "2", normalize to the stored label format "V2-<gidno>"
+                if (int.TryParse(v, out var n) && n >= 0)
+                    return "V" + n + "-" + gidno;
+
+                return v;
             }
 
+            versionA = NormalizeVersion(versionA, aslmdnoString);
+            versionB = NormalizeVersion(versionB, aslmdnoString);
+            
             var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
             var rowsA = new List<scfs_erp.Models.GateInDetailEditLogRow>();
             var rowsB = new List<scfs_erp.Models.GateInDetailEditLogRow>();
@@ -963,7 +968,7 @@ namespace scfs_erp.Controllers.Import
                                                 FROM [dbo].[GateInDetailEditLog]
                                                 WHERE [Modules] = 'ImportDeStuff'
                                                   AND (CAST([GIDNO] AS NVARCHAR(50)) = @ASLMDNO_STR OR CAST([GIDNO] AS NVARCHAR(50)) = CAST(@ASLMID AS NVARCHAR(50)))
-                                                  AND RTRIM(LTRIM([Version])) = @V", sql))
+                                                  AND LOWER(RTRIM(LTRIM([Version]))) = LOWER(RTRIM(LTRIM(@V)))", sql))
                 {
                     cmd.Parameters.Add("@ASLMID", System.Data.SqlDbType.Int);
                     cmd.Parameters.Add("@ASLMDNO_STR", System.Data.SqlDbType.NVarChar, 50);

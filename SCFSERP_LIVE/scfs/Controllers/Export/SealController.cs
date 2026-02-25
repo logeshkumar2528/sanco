@@ -983,15 +983,27 @@ namespace scfs_erp.Controllers.Export
                 return RedirectToAction("EditLogSeal", new { stfmid = stfmid });
             }
 
-            versionA = (versionA ?? string.Empty).Trim();
-            versionB = (versionB ?? string.Empty).Trim();
             string gidnoString = stfmid.HasValue ? stfmid.Value.ToString() : "";
 
-            var baseLabel = "v0-" + gidnoString;
-            if (string.Equals(versionA, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionA, "V0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionA, "v0", StringComparison.OrdinalIgnoreCase))
-                versionA = baseLabel;
-            if (string.Equals(versionB, "0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionB, "V0", StringComparison.OrdinalIgnoreCase) || string.Equals(versionB, "v0", StringComparison.OrdinalIgnoreCase))
-                versionB = baseLabel;
+            string NormalizeVersion(string v, string gidno)
+            {
+                v = (v ?? string.Empty).Trim().Replace("\t", "").Replace("\r", "").Replace("\n", "");
+                if (string.IsNullOrWhiteSpace(v)) return v;
+                if (string.Equals(v, "0", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(v, "V0", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(v, "v0", StringComparison.OrdinalIgnoreCase) ||
+                    v.StartsWith("v0-", StringComparison.OrdinalIgnoreCase) ||
+                    v.StartsWith("V0-", StringComparison.OrdinalIgnoreCase))
+                    return "v0-" + gidno;
+
+                if (int.TryParse(v, out var n) && n >= 0)
+                    return "V" + n + "-" + gidno;
+
+                return v;
+            }
+
+            versionA = NormalizeVersion(versionA, gidnoString);
+            versionB = NormalizeVersion(versionB, gidnoString);
 
             var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
             var a = new List<scfs_erp.Models.GateInDetailEditLogRow>();
@@ -1001,7 +1013,7 @@ namespace scfs_erp.Controllers.Export
                 using (var sql = new SqlConnection(cs.ConnectionString))
                 using (var cmd = new SqlCommand(@"SELECT [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
                                                 FROM [dbo].[GateInDetailEditLog]
-                                                WHERE [GIDNO]=@GIDNO AND [Modules]='Seal' AND RTRIM(LTRIM([Version]))=@V", sql))
+                                                WHERE [GIDNO]=@GIDNO AND [Modules]='Seal' AND LOWER(RTRIM(LTRIM([Version]))) = LOWER(RTRIM(LTRIM(@V)))", sql))
                 {
                     cmd.Parameters.Add("@GIDNO", System.Data.SqlDbType.NVarChar, 50);
                     cmd.Parameters.Add("@V", System.Data.SqlDbType.NVarChar, 100);
@@ -1329,9 +1341,9 @@ namespace scfs_erp.Controllers.Export
             {
                 // Check if baseline already exists
                 using (var sql = new SqlConnection(cs.ConnectionString))
-                using (var cmd = new SqlCommand("SELECT COUNT(1) FROM [dbo].[GateInDetailEditLog] WHERE [GIDNO]=@GIDNO AND [Modules]='Seal' AND (RTRIM(LTRIM([Version]))=@VLower OR RTRIM(LTRIM([Version]))=@VUpper OR RTRIM(LTRIM([Version]))='0' OR RTRIM(LTRIM([Version]))='V0')", sql))
+                using (var cmd = new SqlCommand("SELECT COUNT(1) FROM [dbo].[GateInDetailEditLog] WHERE [GIDNO]=@STFMID AND [Modules]='Seal' AND (LOWER(RTRIM(LTRIM([Version])))=LOWER(RTRIM(LTRIM(@VLower))) OR LOWER(RTRIM(LTRIM([Version])))=LOWER(RTRIM(LTRIM(@VUpper))) OR LOWER(RTRIM(LTRIM([Version])))='0' OR LOWER(RTRIM(LTRIM([Version])))='v0')", sql))
                 {
-                    cmd.Parameters.AddWithValue("@GIDNO", gidno);
+                    cmd.Parameters.AddWithValue("@STFMID", gidno);
                     var baselineVerLower = "v0-" + gidno;
                     var baselineVerUpper = "V0-" + gidno;
                     cmd.Parameters.AddWithValue("@VLower", baselineVerLower);

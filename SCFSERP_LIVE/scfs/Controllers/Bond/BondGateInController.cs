@@ -955,18 +955,8 @@ namespace scfs_erp.Controllers.Bond
                 catch { /* use gidid.Value.ToString() as final fallback */ }
             }
             
-            if (gidid.HasValue)
-            {
-                var baseLabel = "v0-" + gidnoString;
-                if (string.Equals(versionA, "0", StringComparison.OrdinalIgnoreCase) || 
-                    string.Equals(versionA, "V0", StringComparison.OrdinalIgnoreCase) || 
-                    string.Equals(versionA, "v0", StringComparison.OrdinalIgnoreCase))
-                    versionA = baseLabel;
-                if (string.Equals(versionB, "0", StringComparison.OrdinalIgnoreCase) || 
-                    string.Equals(versionB, "V0", StringComparison.OrdinalIgnoreCase) || 
-                    string.Equals(versionB, "v0", StringComparison.OrdinalIgnoreCase))
-                    versionB = baseLabel;
-            }
+            versionA = NormalizeVersion(versionA, gidnoString);
+            versionB = NormalizeVersion(versionB, gidnoString);
 
             var rowsA = new List<scfs_erp.Models.GateInDetailEditLogRow>();
             var rowsB = new List<scfs_erp.Models.GateInDetailEditLogRow>();
@@ -977,7 +967,7 @@ namespace scfs_erp.Controllers.Bond
                                                 FROM [dbo].[GateInDetailEditLog]
                                                 WHERE [Modules] = 'BondGateIn'
                                                   AND [GIDNO] = @GIDNO
-                                                  AND RTRIM(LTRIM([Version])) = @V", sql))
+                                                  AND LOWER(RTRIM(LTRIM([Version]))) = LOWER(RTRIM(LTRIM(@V)))", sql))
                 {
                     cmd.Parameters.Add("@GIDNO", System.Data.SqlDbType.NVarChar, 50);
                     cmd.Parameters.Add("@V", System.Data.SqlDbType.NVarChar, 100);
@@ -1235,6 +1225,33 @@ namespace scfs_erp.Controllers.Bond
             ViewBag.RowsB = rowsB;
 
             return View();
+        }
+
+        private static string NormalizeVersion(string version, string gidno)
+        {
+            version = (version ?? string.Empty).Trim().Replace("\t", "").Replace("\r", "").Replace("\n", "");
+            gidno = (gidno ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(version)) return version;
+            if (string.IsNullOrWhiteSpace(gidno)) return version;
+
+            // Baseline shortcuts
+            if (version.Equals("0", StringComparison.OrdinalIgnoreCase) ||
+                version.Equals("v0", StringComparison.OrdinalIgnoreCase) ||
+                version.Equals("V0", StringComparison.OrdinalIgnoreCase) ||
+                version.StartsWith("v0-", StringComparison.OrdinalIgnoreCase) ||
+                version.StartsWith("V0-", StringComparison.OrdinalIgnoreCase))
+            {
+                return "v0-" + gidno;
+            }
+
+            // Numeric shortcut: 2 => V2-<gidno>
+            if (int.TryParse(version, out var n) && n >= 0)
+            {
+                return $"V{n}-{gidno}";
+            }
+
+            // Already in stored format (V2-xxxx etc) or custom labels
+            return version;
         }
 
         // ========================= Edit Logging Helper Methods =========================

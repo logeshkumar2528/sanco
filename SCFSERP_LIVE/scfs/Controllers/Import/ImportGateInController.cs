@@ -2120,20 +2120,25 @@ namespace scfs_erp.Controllers.Import
                 return RedirectToAction("EditLogGateInExBond", new { gidid = gidid });
             }
 
-            // Normalize version strings
-            versionA = (versionA ?? string.Empty).Trim();
-            versionB = (versionB ?? string.Empty).Trim();
-            
-            // Map '0' or 'v0'/'V0' to 'v0-<EBNDDNO>' for baseline comparisons
-            var baseLabel = "v0-" + searchGidno;
-            if (string.Equals(versionA, "0", StringComparison.OrdinalIgnoreCase) || 
-                string.Equals(versionA, "V0", StringComparison.OrdinalIgnoreCase) || 
-                string.Equals(versionA, "v0", StringComparison.OrdinalIgnoreCase))
-                versionA = baseLabel;
-            if (string.Equals(versionB, "0", StringComparison.OrdinalIgnoreCase) || 
-                string.Equals(versionB, "V0", StringComparison.OrdinalIgnoreCase) || 
-                string.Equals(versionB, "v0", StringComparison.OrdinalIgnoreCase))
-                versionB = baseLabel;
+            string NormalizeVersion(string v, string gidno)
+            {
+                v = (v ?? string.Empty).Trim().Replace("\t", "").Replace("\r", "").Replace("\n", "");
+                if (string.IsNullOrWhiteSpace(v)) return v;
+                if (string.Equals(v, "0", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(v, "V0", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(v, "v0", StringComparison.OrdinalIgnoreCase) ||
+                    v.StartsWith("v0-", StringComparison.OrdinalIgnoreCase) ||
+                    v.StartsWith("V0-", StringComparison.OrdinalIgnoreCase))
+                    return "v0-" + gidno;
+
+                if (int.TryParse(v, out var n) && n >= 0)
+                    return "V" + n + "-" + gidno;
+
+                return v;
+            }
+
+            versionA = NormalizeVersion(versionA, searchGidno);
+            versionB = NormalizeVersion(versionB, searchGidno);
 
             var rowsA = new List<scfs_erp.Models.GateInDetailEditLogRow>();
             var rowsB = new List<scfs_erp.Models.GateInDetailEditLogRow>();
@@ -2145,7 +2150,7 @@ namespace scfs_erp.Controllers.Import
                                                 FROM [dbo].[GateInDetailEditLog]
                                                 WHERE [Modules] = 'ExBondGateIn'
                                                   AND CAST([GIDNO] AS NVARCHAR(50)) = @GIDNO
-                                                  AND RTRIM(LTRIM([Version])) = @V", sql))
+                                                  AND LOWER(RTRIM(LTRIM([Version]))) = LOWER(RTRIM(LTRIM(@V)))", sql))
                 {
                     cmd.Parameters.Add("@GIDNO", System.Data.SqlDbType.NVarChar, 50);
                     cmd.Parameters.Add("@V", System.Data.SqlDbType.NVarChar, 100);
