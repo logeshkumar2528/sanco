@@ -223,8 +223,8 @@
         "TRANDREFNAME", "Reference Name"
     };
     
-    // For ExBondGateIn, ImportLoadSlip, OpenSheet, StuffingBill, ImportInvoice, and Manual Bills, don't exclude Status - user wants to see it
-    if (module != "ExBondGateIn" && module != "ImportLoadSlip" && module != "OpenSheet" && module != "StuffingBill" && module != "ImportInvoice" && module != "ImportManualBill" && module != "ExportManualBill")
+    // For ExBondGateIn, ImportLoadSlip, ImportDeStuff, OpenSheet, StuffingBill, ImportInvoice, and Manual Bills, don't exclude Status - user wants to see it
+    if (module != "ExBondGateIn" && module != "ImportLoadSlip" && module != "ImportDeStuff" && module != "OpenSheet" && module != "StuffingBill" && module != "ImportInvoice" && module != "ImportManualBill" && module != "ExportManualBill")
     {
         excludedFields.Add("Status");
         excludedFields.Add("DISPSTATUS");

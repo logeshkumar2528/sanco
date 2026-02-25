@@ -1712,6 +1712,10 @@ namespace scfs_erp.Controllers.Export
                             return dictTariff[id];
                         if (field == "TRANMODE" && int.TryParse(val, out id) && dictMode.ContainsKey(id))
                             return dictMode[id];
+                        if (field == "TRANBTYPE")
+                            return val == "1" ? "LI" : val == "2" ? "DS" : val;
+                        if (field == "REGSTRID")
+                            return val == "49" ? "TAX INVOICE" : val == "50" ? "BILL OF SUPPLY" : val;
                         if (field == "STATEID" && int.TryParse(val, out id) && dictState.ContainsKey(id))
                             return dictState[id];
                         if (field == "TSTATEID" && int.TryParse(val, out id) && dictState.ContainsKey(id))
@@ -1936,6 +1940,10 @@ namespace scfs_erp.Controllers.Export
                             return dictTariff[id];
                         if (field == "TRANMODE" && int.TryParse(val, out id) && dictMode.ContainsKey(id))
                             return dictMode[id];
+                        if (field == "TRANBTYPE")
+                            return val == "1" ? "LI" : val == "2" ? "DS" : val;
+                        if (field == "REGSTRID")
+                            return val == "49" ? "TAX INVOICE" : val == "50" ? "BILL OF SUPPLY" : val;
                         if (field == "STATEID" && int.TryParse(val, out id) && dictState.ContainsKey(id))
                             return dictState[id];
                         if (field == "TSTATEID" && int.TryParse(val, out id) && dictState.ContainsKey(id))

@@ -366,6 +366,7 @@ namespace scfs_erp.Controllers.Import
 
             string userId = Session["CUSRID"]?.ToString() ?? "";
             AuthorizationSlipMaster before = null;
+            AuthorizationSlipDetail beforeDetail = null;
             
             if (ASLMID != 0)
             {
@@ -380,6 +381,13 @@ namespace scfs_erp.Controllers.Import
                     }
                 }
                 catch { /* ignore if baseline creation fails */ }
+
+                // Capture before state for detail fields (Labour/Destuff Type/Labour Type/Operation)
+                try
+                {
+                    beforeDetail = context.authorizationslipdetail.AsNoTracking().FirstOrDefault(x => x.ASLMID == ASLMID);
+                }
+                catch { /* ignore */ }
             }
 
             authorizatioslipmaster.COMPYID = Convert.ToInt32(Session["compyid"]);
@@ -541,6 +549,22 @@ namespace scfs_erp.Controllers.Import
                     DELIDS = DELIDS + "," + ASLDID.ToString();
                 }
             }
+
+            // Log detail-field changes after saving details (single snapshot comparison for this ASLMID)
+            if (ASLMID != 0 && beforeDetail != null)
+            {
+                try
+                {
+                    var afterDetail = context.authorizationslipdetail.AsNoTracking().FirstOrDefault(x => x.ASLMID == ASLMID);
+                    if (afterDetail != null)
+                    {
+                        int nextVersion = CalculateNextVersion(authorizatioslipmaster.ASLMDNO);
+                        LogDeStuffDetailEdits(beforeDetail, afterDetail, authorizatioslipmaster.ASLMDNO, userId, nextVersion);
+                    }
+                }
+                catch { /* best-effort */ }
+            }
+
             // context.Database.ExecuteSqlCommand("DELETE FROM authorizationslipdetail  WHERE ASLMID=" + ASLMID + " and  ASLDID NOT IN(" + DELIDS.Substring(1) + ")");
             Response.Redirect("Index");
         }
@@ -855,6 +879,7 @@ namespace scfs_erp.Controllers.Import
                         case "LCATEID": return "Labour";
                         case "ASLDTYPE": return "Destuff Type";
                         case "ASLLTYPE": return "Labour Type";
+                        case "ASLOTYPE": return "Operation";
                         case "OSDID": return "Open Sheet Detail ID";
                         case "GIDID": return "Gate In Detail ID";
                         case "VHLNO": return "Vehicle No";
@@ -876,7 +901,7 @@ namespace scfs_erp.Controllers.Import
                         fieldNameLocal.Equals("Detail.ASLOTYPE", StringComparison.OrdinalIgnoreCase) ||
                         fieldNameLocal.Equals("Operation Type", StringComparison.OrdinalIgnoreCase))
                     {
-                        return false;
+                        return true;
                     }
                     return true;
                 }).ToList();
@@ -1234,10 +1259,54 @@ namespace scfs_erp.Controllers.Import
                     if (formattedValue == "1") return "CANCELLED";
                     if (formattedValue == "0") return "INBOOKS";
                 }
+                else if (fieldName.Equals("ASLOTYPE", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (int.TryParse(formattedValue, out lookupId) && lookupId > 0)
+                    {
+                        var op = context.ImportDestuffSlipOperation.FirstOrDefault(x => x.OPRTYPE == lookupId);
+                        if (op != null && !string.IsNullOrEmpty(op.OPRTYPEDESC))
+                            return op.OPRTYPEDESC;
+                    }
+                }
             }
             catch { }
 
             return formattedValue;
+        }
+
+        private void LogDeStuffDetailEdits(AuthorizationSlipDetail before, AuthorizationSlipDetail after, string aslmdno, string userId, int nextVersion)
+        {
+            if (before == null || after == null) return;
+            if (string.IsNullOrWhiteSpace(aslmdno)) return;
+            var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
+            if (cs == null || string.IsNullOrWhiteSpace(cs.ConnectionString)) return;
+
+            var fields = new[] { "LCATEID", "ASLDTYPE", "ASLLTYPE", "ASLOTYPE" };
+            var versionLabel = $"V{nextVersion}-{aslmdno}";
+
+            foreach (var f in fields)
+            {
+                try
+                {
+                    object ov = null;
+                    object nv = null;
+                    switch (f)
+                    {
+                        case "LCATEID": ov = before.LCATEID; nv = after.LCATEID; break;
+                        case "ASLDTYPE": ov = before.ASLDTYPE; nv = after.ASLDTYPE; break;
+                        case "ASLLTYPE": ov = before.ASLLTYPE; nv = after.ASLLTYPE; break;
+                        case "ASLOTYPE": ov = before.ASLOTYPE; nv = after.ASLOTYPE; break;
+                    }
+
+                    var os = FormatValForLogging(f, ov);
+                    var ns = FormatValForLogging(f, nv);
+                    if (string.Equals(os ?? string.Empty, ns ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    InsertEditLogRow(cs.ConnectionString, aslmdno, "Detail." + f, os, ns, userId, versionLabel, "ImportDeStuff");
+                }
+                catch { }
+            }
         }
 
         private static string FormatVal(object v)
