@@ -943,6 +943,9 @@ namespace scfs_erp.Controllers
             try
             {
                 var dictCate = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
+                var dictCateAddr = context.categoryaddressdetails
+                    .GroupBy(x => x.CATEAID)
+                    .ToDictionary(g => g.Key, g => g.First().CATEATYPEDESC);
                 var dictEOPT = context.Export_OperationTypeMaster.ToDictionary(x => x.EOPTID, x => x.EOPTDESC);
                 var dictSlab = context.exportslabtypemaster.ToDictionary(x => x.SLABTID, x => x.SLABTDESC);
 
@@ -958,6 +961,8 @@ namespace scfs_erp.Controllers
                             return dictCate[id];
                         if (field == "STFBILLREFID" && int.TryParse(val, out id) && dictCate.ContainsKey(id))
                             return dictCate[id];
+                        if ((field == "STFCATEAID" || field == "STFBCATEAID") && int.TryParse(val, out id) && dictCateAddr.ContainsKey(id))
+                            return dictCateAddr[id];
                         if (field == "EOPTID" && int.TryParse(val, out id) && dictEOPT.ContainsKey(id))
                             return dictEOPT[id];
                         if (field == "SLABTID" && int.TryParse(val, out id) && dictSlab.ContainsKey(id))
@@ -1016,53 +1021,76 @@ namespace scfs_erp.Controllers
             var cs = ConfigurationManager.ConnectionStrings["SCFSERP_EditLog"];
             var a = new List<scfs_erp.Models.GateInDetailEditLogRow>();
             var b = new List<scfs_erp.Models.GateInDetailEditLogRow>();
-            if (cs != null && !string.IsNullOrWhiteSpace(cs.ConnectionString))
+
+            // For baseline (v0) comparisons, show a full snapshot (not just the INITIAL placeholder row)
+            // This guarantees v0 always contains all current data for meaningful comparisons.
+            if (string.Equals(versionA, baseLabel, StringComparison.OrdinalIgnoreCase))
             {
-                using (var sql = new SqlConnection(cs.ConnectionString))
-                using (var cmd = new SqlCommand(@"SELECT [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
+                a = BuildStuffingBaselineRows(stfmid.Value, versionA);
+            }
+            if (string.Equals(versionB, baseLabel, StringComparison.OrdinalIgnoreCase))
+            {
+                b = BuildStuffingBaselineRows(stfmid.Value, versionB);
+            }
+
+            if ((a == null || a.Count == 0) || (b == null || b.Count == 0))
+            {
+                if (cs != null && !string.IsNullOrWhiteSpace(cs.ConnectionString))
+                {
+                    using (var sql = new SqlConnection(cs.ConnectionString))
+                    using (var cmd = new SqlCommand(@"SELECT [GIDNO],[FieldName],[OldValue],[NewValue],[ChangedBy],[ChangedOn],[Version],[Modules]
                                                 FROM [dbo].[GateInDetailEditLog]
                                                 WHERE [GIDNO]=@GIDNO AND [Modules]='Stuffing' AND RTRIM(LTRIM([Version]))=@V", sql))
-                {
-                    cmd.Parameters.Add("@GIDNO", System.Data.SqlDbType.NVarChar, 50);
-                    cmd.Parameters.Add("@V", System.Data.SqlDbType.NVarChar, 100);
-
-                    sql.Open();
-                    cmd.Parameters["@GIDNO"].Value = gidnoString;
-                    cmd.Parameters["@V"].Value = versionA.Trim();
-                    using (var r = cmd.ExecuteReader())
                     {
-                        while (r.Read())
+                        cmd.Parameters.Add("@GIDNO", System.Data.SqlDbType.NVarChar, 50);
+                        cmd.Parameters.Add("@V", System.Data.SqlDbType.NVarChar, 100);
+
+                        sql.Open();
+
+                        if (a == null || a.Count == 0)
                         {
-                            a.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                            cmd.Parameters["@GIDNO"].Value = gidnoString;
+                            cmd.Parameters["@V"].Value = versionA.Trim();
+                            using (var r = cmd.ExecuteReader())
                             {
-                                GIDNO = gidnoString,
-                                FieldName = Convert.ToString(r["FieldName"]),
-                                OldValue = r["OldValue"] == DBNull.Value ? null : Convert.ToString(r["OldValue"]),
-                                NewValue = r["NewValue"] == DBNull.Value ? null : Convert.ToString(r["NewValue"]),
-                                ChangedBy = Convert.ToString(r["ChangedBy"]),
-                                ChangedOn = r["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r["ChangedOn"]) : DateTime.MinValue,
-                                Version = versionA,
-                                Modules = Convert.ToString(r["Modules"])
-                            });
+                                while (r.Read())
+                                {
+                                    a.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                                    {
+                                        GIDNO = gidnoString,
+                                        FieldName = Convert.ToString(r["FieldName"]),
+                                        OldValue = r["OldValue"] == DBNull.Value ? null : Convert.ToString(r["OldValue"]),
+                                        NewValue = r["NewValue"] == DBNull.Value ? null : Convert.ToString(r["NewValue"]),
+                                        ChangedBy = Convert.ToString(r["ChangedBy"]),
+                                        ChangedOn = r["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r["ChangedOn"]) : DateTime.MinValue,
+                                        Version = versionA,
+                                        Modules = Convert.ToString(r["Modules"])
+                                    });
+                                }
+                            }
                         }
-                    }
 
-                    cmd.Parameters["@V"].Value = versionB.Trim();
-                    using (var r2 = cmd.ExecuteReader())
-                    {
-                        while (r2.Read())
+                        if (b == null || b.Count == 0)
                         {
-                            b.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                            cmd.Parameters["@GIDNO"].Value = gidnoString;
+                            cmd.Parameters["@V"].Value = versionB.Trim();
+                            using (var r2 = cmd.ExecuteReader())
                             {
-                                GIDNO = gidnoString,
-                                FieldName = Convert.ToString(r2["FieldName"]),
-                                OldValue = r2["OldValue"] == DBNull.Value ? null : Convert.ToString(r2["OldValue"]),
-                                NewValue = r2["NewValue"] == DBNull.Value ? null : Convert.ToString(r2["NewValue"]),
-                                ChangedBy = Convert.ToString(r2["ChangedBy"]),
-                                ChangedOn = r2["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r2["ChangedOn"]) : DateTime.MinValue,
-                                Version = versionB,
-                                Modules = Convert.ToString(r2["Modules"])
-                            });
+                                while (r2.Read())
+                                {
+                                    b.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                                    {
+                                        GIDNO = gidnoString,
+                                        FieldName = Convert.ToString(r2["FieldName"]),
+                                        OldValue = r2["OldValue"] == DBNull.Value ? null : Convert.ToString(r2["OldValue"]),
+                                        NewValue = r2["NewValue"] == DBNull.Value ? null : Convert.ToString(r2["NewValue"]),
+                                        ChangedBy = Convert.ToString(r2["ChangedBy"]),
+                                        ChangedOn = r2["ChangedOn"] != DBNull.Value ? Convert.ToDateTime(r2["ChangedOn"]) : DateTime.MinValue,
+                                        Version = versionB,
+                                        Modules = Convert.ToString(r2["Modules"])
+                                    });
+                                }
+                            }
                         }
                     }
                 }
@@ -1072,6 +1100,9 @@ namespace scfs_erp.Controllers
             try
             {
                 var dictCate = context.categorymasters.ToDictionary(x => x.CATEID, x => x.CATENAME);
+                var dictCateAddr = context.categoryaddressdetails
+                    .GroupBy(x => x.CATEAID)
+                    .ToDictionary(g => g.Key, g => g.First().CATEATYPEDESC);
                 var dictEOPT = context.Export_OperationTypeMaster.ToDictionary(x => x.EOPTID, x => x.EOPTDESC);
                 var dictSlab = context.exportslabtypemaster.ToDictionary(x => x.SLABTID, x => x.SLABTDESC);
 
@@ -1087,6 +1118,8 @@ namespace scfs_erp.Controllers
                             return dictCate[id];
                         if (field == "STFBILLREFID" && int.TryParse(val, out id) && dictCate.ContainsKey(id))
                             return dictCate[id];
+                        if ((field == "STFCATEAID" || field == "STFBCATEAID") && int.TryParse(val, out id) && dictCateAddr.ContainsKey(id))
+                            return dictCateAddr[id];
                         if (field == "EOPTID" && int.TryParse(val, out id) && dictEOPT.ContainsKey(id))
                             return dictEOPT[id];
                         if (field == "SLABTID" && int.TryParse(val, out id) && dictSlab.ContainsKey(id))
@@ -1130,6 +1163,94 @@ namespace scfs_erp.Controllers
             ViewBag.RowsB = b;
             ViewBag.Module = "Stuffing";
             return View("~/Views/ImportGateIn/EditLogGateInCompare.cshtml");
+        }
+
+        private List<scfs_erp.Models.GateInDetailEditLogRow> BuildStuffingBaselineRows(int stfmid, string versionLabel)
+        {
+            var rows = new List<scfs_erp.Models.GateInDetailEditLogRow>();
+            try
+            {
+                var master = context.stuffingmasters.AsNoTracking().FirstOrDefault(x => x.STFMID == stfmid);
+                if (master == null) return rows;
+
+                var gidno = stfmid.ToString();
+
+                // Aggregate detail values to show on baseline
+                try
+                {
+                    var detailIds = context.stuffingdetails.AsNoTracking()
+                        .Where(x => x.STFMID == stfmid)
+                        .Select(x => x.STFDID)
+                        .ToList();
+
+                    if (detailIds.Count > 0)
+                    {
+                        var productDetails = context.stuffingproductdetails.AsNoTracking()
+                            .Where(x => detailIds.Contains(x.STFDID))
+                            .ToList();
+
+                        var totalNop = productDetails.Sum(d => (decimal?)(d.STFDNOP) ?? 0m);
+                        var totalWeight = productDetails.Sum(d => (decimal?)(d.STFDQTY) ?? 0m);
+
+                        rows.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                        {
+                            GIDNO = gidno,
+                            FieldName = "STFDNOP",
+                            OldValue = null,
+                            NewValue = totalNop.ToString(),
+                            ChangedBy = string.Empty,
+                            ChangedOn = DateTime.MinValue,
+                            Version = versionLabel,
+                            Modules = "Stuffing"
+                        });
+                        rows.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                        {
+                            GIDNO = gidno,
+                            FieldName = "STFDQTY",
+                            OldValue = null,
+                            NewValue = totalWeight.ToString(),
+                            ChangedBy = string.Empty,
+                            ChangedOn = DateTime.MinValue,
+                            Version = versionLabel,
+                            Modules = "Stuffing"
+                        });
+                    }
+                }
+                catch { }
+
+                var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    "STFMID", "COMPYID", "PRCSDATE", "LMUSRID", "CUSRID", "STFTID", "TGID"
+                };
+
+                var props = typeof(StuffingMaster).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+                foreach (var p in props)
+                {
+                    if (!p.CanRead) continue;
+                    if (p.PropertyType.IsClass && p.PropertyType != typeof(string) && !p.PropertyType.IsValueType) continue;
+                    if (exclude.Contains(p.Name)) continue;
+
+                    var v = p.GetValue(master, null);
+                    if (v == null || v == DBNull.Value) continue;
+
+                    var asString = FormatValForLogging(p.Name, v);
+                    if (string.IsNullOrWhiteSpace(asString)) continue;
+
+                    rows.Add(new scfs_erp.Models.GateInDetailEditLogRow
+                    {
+                        GIDNO = gidno,
+                        FieldName = p.Name,
+                        OldValue = null,
+                        NewValue = asString,
+                        ChangedBy = string.Empty,
+                        ChangedOn = DateTime.MinValue,
+                        Version = versionLabel,
+                        Modules = "Stuffing"
+                    });
+                }
+            }
+            catch { }
+            return rows;
         }
 
         private static Dictionary<string, string> GetStuffingFieldDisplayNames()

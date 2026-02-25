@@ -222,6 +222,20 @@
         // Keeping TRANDREFNAME/Reference Name excluded (noise from some modules).
         "TRANDREFNAME", "Reference Name"
     };
+
+    if (module == "Stuffing")
+    {
+        excludedFields.Add("Name");
+        excludedFields.Add("STFMNAME");
+        excludedFields.Add("Bill Refer");
+        excludedFields.Add("Bill Reference");
+        excludedFields.Add("STFBILLREFID");
+        excludedFields.Add("STFBILLREFNAME");
+        excludedFields.Add("Billing Name");
+        excludedFields.Add("Bill CHA Location");
+        excludedFields.Add("CHA Location");
+        excludedFields.Add("STFCATEAID");
+    }
     
     // For ExBondGateIn, ImportLoadSlip, ImportDeStuff, OpenSheet, StuffingBill, ImportInvoice, and Manual Bills, don't exclude Status - user wants to see it
     if (module != "ExBondGateIn" && module != "ImportLoadSlip" && module != "ImportDeStuff" && module != "OpenSheet" && module != "StuffingBill" && module != "ImportInvoice" && module != "ImportManualBill" && module != "ExportManualBill")
